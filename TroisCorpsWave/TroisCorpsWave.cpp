@@ -12,8 +12,8 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
   GetParam(kParamRadius2)->InitDouble("Radius 2", 1.5, 0.1, 6., 0.01);
   GetParam(kParamRadius3)->InitDouble("Radius 3", 1.5, 0.1, 6., 0.01);
   GetParam(kParamOrbitalVelocity)->InitDouble("Orbital Vel", 0., 0., 5., 0.01);
-  GetParam(kParamBoxSize)->InitDouble("Box Size", 4., 1., 20., 0.01);
-  GetParam(kParamCaptureWindow)->InitDouble("Capture Window", 0.3, 0.02, 5., 0.001, "s");
+  GetParam(kParamBoxSize)->InitDouble("Box Size", 1., 0.01, 2., 0.001);
+  GetParam(kParamCaptureWindow)->InitDouble("Capture Window", 3., 1., 10., 0.001, "s");
   GetParam(kParamTableSize)->InitEnum("Table Size", 4, 7, "", IParam::kFlagsNone, "",
                                        "64", "128", "256", "512", "1024", "2048", "4096");
   GetParam(kParamBitDepth)->InitInt("Bit Depth", 16, 2, 16);

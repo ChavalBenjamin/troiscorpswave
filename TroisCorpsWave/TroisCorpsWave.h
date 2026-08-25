@@ -65,7 +65,7 @@ private:
 
   std::atomic<bool> mCaptureRequested { false };
 
-  static constexpr int kMaxRawCapture = 20000; // ~2.5s a 8000Hz de resolution de capture
+  static constexpr int kMaxRawCapture = 80000; // 10s a 8000Hz de resolution de capture (correspond au nouveau max du parametre Capture Window)
   float mRawCaptureBuffer[kMaxRawCapture];
 
   // Tres court fondu d'entree/sortie autour des Note On/Off pour eviter
