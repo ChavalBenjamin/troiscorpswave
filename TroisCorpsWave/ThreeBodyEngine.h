@@ -33,19 +33,23 @@ public:
 
   void SetBoxSize(double size) { mBoxSize = std::max(0.5, size); }
 
-  // Place les 3 corps a des rayons independants (permet par exemple un
-  // corps proche du centre, un moyen, un loin - configuration hierarchique),
-  // avec une vitesse tangentielle proportionnelle a orbitalVelocity : a 0,
-  // les corps demarrent immobiles (effondrement chaotique) ; en augmentant,
-  // on se rapproche d'un mouvement orbital regulier (rotation rigide).
-  void ResetBodies(double r1, double r2, double r3, double orbitalVelocity)
+  // Place les 3 corps a des rayons ET des angles independants (permet par
+  // exemple un corps proche du centre, un moyen, un loin - configuration
+  // hierarchique - ET de choisir leur disposition angulaire plutot que le
+  // triangle regulier par defaut), avec une vitesse tangentielle
+  // proportionnelle a orbitalVelocity : a 0, les corps demarrent immobiles
+  // (effondrement chaotique) ; en augmentant, on se rapproche d'un
+  // mouvement orbital regulier (rotation rigide).
+  void ResetBodies(double r1, double r2, double r3,
+                    double angle1Deg, double angle2Deg, double angle3Deg,
+                    double orbitalVelocity)
   {
     double radii[3] = { r1, r2, r3 };
+    double angles[3] = { angle1Deg * kDegToRad, angle2Deg * kDegToRad, angle3Deg * kDegToRad };
     for (int i = 0; i < 3; i++)
     {
-      double angle = (2.0 * kPi / 3.0) * i;
-      mBodies[i].x = radii[i] * std::cos(angle);
-      mBodies[i].y = radii[i] * std::sin(angle);
+      mBodies[i].x = radii[i] * std::cos(angles[i]);
+      mBodies[i].y = radii[i] * std::sin(angles[i]);
       // vitesse tangentielle = rotation rigide : v = omega * (-y, x)
       mBodies[i].vx = -orbitalVelocity * mBodies[i].y;
       mBodies[i].vy = orbitalVelocity * mBodies[i].x;
@@ -77,6 +81,7 @@ public:
 
 private:
   static constexpr double kPi = 3.14159265358979323846;
+  static constexpr double kDegToRad = kPi / 180.0;
   static constexpr double kG = 1.0;          // constante gravitationnelle interne
   static constexpr double kSoftening = 0.05; // evite les forces infinies en cas de quasi-collision
 

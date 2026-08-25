@@ -11,6 +11,9 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
   GetParam(kParamRadius1)->InitDouble("Radius 1", 1.5, 0.1, 6., 0.01);
   GetParam(kParamRadius2)->InitDouble("Radius 2", 1.5, 0.1, 6., 0.01);
   GetParam(kParamRadius3)->InitDouble("Radius 3", 1.5, 0.1, 6., 0.01);
+  GetParam(kParamAngle1)->InitDouble("Angle 1", 0., 0., 360., 0.1, "deg");
+  GetParam(kParamAngle2)->InitDouble("Angle 2", 120., 0., 360., 0.1, "deg");
+  GetParam(kParamAngle3)->InitDouble("Angle 3", 240., 0., 360., 0.1, "deg");
   GetParam(kParamOrbitalVelocity)->InitDouble("Orbital Vel", 0., 0., 5., 0.01);
   GetParam(kParamBoxSize)->InitDouble("Box Size", 1., 0.01, 2., 0.001);
   GetParam(kParamCaptureWindow)->InitDouble("Capture Window", 3., 1., 10., 0.001, "s");
@@ -39,10 +42,10 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
 
     const IRECT bounds = pGraphics->GetBounds();
-    constexpr float kControlsHeight = 450.f;
+    constexpr float kControlsHeight = 530.f;
     IRECT controlsZone = bounds.GetFromTop(kControlsHeight).GetPadded(-20.f);
 
-    constexpr int kRows = 5, kCols = 4;
+    constexpr int kRows = 6, kCols = 4;
     auto Cell = [&](int row, int col) { return controlsZone.GetGridCell(row, col, kRows, kCols); };
 
     pGraphics->AttachControl(new IVKnobControl(Cell(0, 0).GetCentredInside(48.f), kParamMass1, "Mass 1"));
@@ -55,20 +58,24 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(Cell(1, 2).GetCentredInside(48.f), kParamRadius3, "Radius 3"));
     pGraphics->AttachControl(new IVKnobControl(Cell(1, 3).GetCentredInside(48.f), kParamBoxSize, "Box Size"));
 
-    pGraphics->AttachControl(new IVKnobControl(Cell(2, 0).GetCentredInside(48.f), kParamCaptureWindow, "Window"));
-    pGraphics->AttachControl(new IVMenuButtonControl(Cell(2, 1).GetCentredInside(85.f, 28.f), kParamTableSize, "Table Size"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(2, 2).GetCentredInside(48.f), kParamBitDepth, "Bit Depth"));
-    pGraphics->AttachControl(new IVButtonControl(Cell(2, 3).GetCentredInside(85.f, 28.f),
+    pGraphics->AttachControl(new IVKnobControl(Cell(2, 0).GetCentredInside(48.f), kParamAngle1, "Angle 1"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(2, 1).GetCentredInside(48.f), kParamAngle2, "Angle 2"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(2, 2).GetCentredInside(48.f), kParamAngle3, "Angle 3"));
+
+    pGraphics->AttachControl(new IVKnobControl(Cell(3, 0).GetCentredInside(48.f), kParamCaptureWindow, "Window"));
+    pGraphics->AttachControl(new IVMenuButtonControl(Cell(3, 1).GetCentredInside(85.f, 28.f), kParamTableSize, "Table Size"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(3, 2).GetCentredInside(48.f), kParamBitDepth, "Bit Depth"));
+    pGraphics->AttachControl(new IVButtonControl(Cell(3, 3).GetCentredInside(85.f, 28.f),
       [this](IControl* pCaller) { RequestCapture(); }, "Capture"));
 
-    pGraphics->AttachControl(new IVKnobControl(Cell(3, 0).GetCentredInside(48.f), kParamVol1, "Vol 1"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(3, 1).GetCentredInside(48.f), kParamVol2, "Vol 2"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(3, 2).GetCentredInside(48.f), kParamVol3, "Vol 3"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(3, 3).GetCentredInside(48.f), kParamAttack, "Attack"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(4, 0).GetCentredInside(48.f), kParamVol1, "Vol 1"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(4, 1).GetCentredInside(48.f), kParamVol2, "Vol 2"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(4, 2).GetCentredInside(48.f), kParamVol3, "Vol 3"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(4, 3).GetCentredInside(48.f), kParamAttack, "Attack"));
 
-    pGraphics->AttachControl(new IVKnobControl(Cell(4, 0).GetCentredInside(48.f), kParamDecay, "Decay"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(4, 1).GetCentredInside(48.f), kParamSustain, "Sustain"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(4, 2).GetCentredInside(48.f), kParamRelease, "Release"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(5, 0).GetCentredInside(48.f), kParamDecay, "Decay"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(5, 1).GetCentredInside(48.f), kParamSustain, "Sustain"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(5, 2).GetCentredInside(48.f), kParamRelease, "Release"));
 
     // Apercu de la table capturee (corps 1), sur l'espace restant en bas
     IRECT waveArea = bounds.GetFromBottom(bounds.H() - kControlsHeight).GetPadded(-15.f);
@@ -101,13 +108,16 @@ void TroisCorpsWave::DoCapture()
   double r1 = GetParam(kParamRadius1)->Value();
   double r2 = GetParam(kParamRadius2)->Value();
   double r3 = GetParam(kParamRadius3)->Value();
+  double a1 = GetParam(kParamAngle1)->Value();
+  double a2 = GetParam(kParamAngle2)->Value();
+  double a3 = GetParam(kParamAngle3)->Value();
   double orbitalVel = GetParam(kParamOrbitalVelocity)->Value();
   double boxSize = GetParam(kParamBoxSize)->Value();
   double captureWindow = GetParam(kParamCaptureWindow)->Value();
 
   mEngine.SetMasses(m1, m2, m3);
   mEngine.SetBoxSize(boxSize);
-  mEngine.ResetBodies(r1, r2, r3, orbitalVel);
+  mEngine.ResetBodies(r1, r2, r3, a1, a2, a3, orbitalVel);
 
   int nCaptured = mEngine.CaptureAllBodiesX(captureWindow, mRawCapture1, mRawCapture2, mRawCapture3, kMaxRawCapture);
 
