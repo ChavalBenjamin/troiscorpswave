@@ -18,6 +18,15 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
                                        "64", "128", "256", "512", "1024", "2048", "4096");
   GetParam(kParamBitDepth)->InitInt("Bit Depth", 16, 2, 16);
 
+  GetParam(kParamVol1)->InitPercentage("Vol 1", 60.);
+  GetParam(kParamVol2)->InitPercentage("Vol 2", 60.);
+  GetParam(kParamVol3)->InitPercentage("Vol 3", 60.);
+
+  GetParam(kParamAttack)->InitDouble("Attack", 0.01, 0.001, 2., 0.001, "s");
+  GetParam(kParamDecay)->InitDouble("Decay", 0.3, 0.001, 3., 0.001, "s");
+  GetParam(kParamSustain)->InitPercentage("Sustain", 70.);
+  GetParam(kParamRelease)->InitDouble("Release", 0.3, 0.001, 5., 0.001, "s");
+
 #if IPLUG_EDITOR
   mMakeGraphicsFunc = [&]() {
     return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS,
@@ -30,30 +39,39 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
 
     const IRECT bounds = pGraphics->GetBounds();
-    IRECT controlsZone = bounds.GetFromTop(280.f).GetPadded(-20.f);
-    IRECT area = controlsZone;
+    constexpr float kControlsHeight = 450.f;
+    IRECT controlsZone = bounds.GetFromTop(kControlsHeight).GetPadded(-20.f);
 
-    constexpr int kRows = 3, kCols = 4;
-    auto Cell = [&](int row, int col) { return area.GetGridCell(row, col, kRows, kCols); };
+    constexpr int kRows = 5, kCols = 4;
+    auto Cell = [&](int row, int col) { return controlsZone.GetGridCell(row, col, kRows, kCols); };
 
-    pGraphics->AttachControl(new IVKnobControl(Cell(0, 0).GetCentredInside(50.f), kParamMass1, "Mass 1"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(0, 1).GetCentredInside(50.f), kParamMass2, "Mass 2"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(0, 2).GetCentredInside(50.f), kParamMass3, "Mass 3"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(0, 3).GetCentredInside(50.f), kParamOrbitalVelocity, "Orbital Vel"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(0, 0).GetCentredInside(48.f), kParamMass1, "Mass 1"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(0, 1).GetCentredInside(48.f), kParamMass2, "Mass 2"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(0, 2).GetCentredInside(48.f), kParamMass3, "Mass 3"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(0, 3).GetCentredInside(48.f), kParamOrbitalVelocity, "Orbital Vel"));
 
-    pGraphics->AttachControl(new IVKnobControl(Cell(1, 0).GetCentredInside(50.f), kParamRadius1, "Radius 1"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(1, 1).GetCentredInside(50.f), kParamRadius2, "Radius 2"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(1, 2).GetCentredInside(50.f), kParamRadius3, "Radius 3"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(1, 3).GetCentredInside(50.f), kParamBoxSize, "Box Size"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(1, 0).GetCentredInside(48.f), kParamRadius1, "Radius 1"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(1, 1).GetCentredInside(48.f), kParamRadius2, "Radius 2"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(1, 2).GetCentredInside(48.f), kParamRadius3, "Radius 3"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(1, 3).GetCentredInside(48.f), kParamBoxSize, "Box Size"));
 
-    pGraphics->AttachControl(new IVKnobControl(Cell(2, 0).GetCentredInside(50.f), kParamCaptureWindow, "Window"));
-    pGraphics->AttachControl(new IVMenuButtonControl(Cell(2, 1).GetCentredInside(90.f, 30.f), kParamTableSize, "Table Size"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(2, 2).GetCentredInside(50.f), kParamBitDepth, "Bit Depth"));
-    pGraphics->AttachControl(new IVButtonControl(Cell(2, 3).GetCentredInside(90.f, 30.f),
+    pGraphics->AttachControl(new IVKnobControl(Cell(2, 0).GetCentredInside(48.f), kParamCaptureWindow, "Window"));
+    pGraphics->AttachControl(new IVMenuButtonControl(Cell(2, 1).GetCentredInside(85.f, 28.f), kParamTableSize, "Table Size"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(2, 2).GetCentredInside(48.f), kParamBitDepth, "Bit Depth"));
+    pGraphics->AttachControl(new IVButtonControl(Cell(2, 3).GetCentredInside(85.f, 28.f),
       [this](IControl* pCaller) { RequestCapture(); }, "Capture"));
 
-    // Aperçu de la table capturee, sur l'espace restant en bas
-    IRECT waveArea = bounds.GetFromBottom(bounds.H() - 280.f).GetPadded(-15.f);
+    pGraphics->AttachControl(new IVKnobControl(Cell(3, 0).GetCentredInside(48.f), kParamVol1, "Vol 1"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(3, 1).GetCentredInside(48.f), kParamVol2, "Vol 2"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(3, 2).GetCentredInside(48.f), kParamVol3, "Vol 3"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(3, 3).GetCentredInside(48.f), kParamAttack, "Attack"));
+
+    pGraphics->AttachControl(new IVKnobControl(Cell(4, 0).GetCentredInside(48.f), kParamDecay, "Decay"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(4, 1).GetCentredInside(48.f), kParamSustain, "Sustain"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(4, 2).GetCentredInside(48.f), kParamRelease, "Release"));
+
+    // Apercu de la table capturee (corps 1), sur l'espace restant en bas
+    IRECT waveArea = bounds.GetFromBottom(bounds.H() - kControlsHeight).GetPadded(-15.f);
     mWaveformView = new WaveformPreviewControl(waveArea);
     pGraphics->AttachControl(mWaveformView);
   };
@@ -68,7 +86,7 @@ void TroisCorpsWave::OnIdle()
 {
   if (mTableUpdatedForUI.exchange(false) && mWaveformView)
   {
-    mWaveformView->SetWaveform(mUITableCopy, mUITableSize);
+    mWaveformView->SetWaveforms(mUITableCopy1, mUITableCopy2, mUITableCopy3, mUITableSize);
     mWaveformView->SetDirty(false);
   }
 }
@@ -91,47 +109,92 @@ void TroisCorpsWave::DoCapture()
   mEngine.SetBoxSize(boxSize);
   mEngine.ResetBodies(r1, r2, r3, orbitalVel);
 
-  int nCaptured = mEngine.CaptureBody1X(captureWindow, mRawCaptureBuffer, kMaxRawCapture);
+  int nCaptured = mEngine.CaptureAllBodiesX(captureWindow, mRawCapture1, mRawCapture2, mRawCapture3, kMaxRawCapture);
 
   int tableSizeIdx = (int)GetParam(kParamTableSize)->Value();
-  int tableSize = 64 << tableSizeIdx; // 0->64, 1->128, ... 6->4096
+  int tableSize = 64 << tableSizeIdx;
 
   if (nCaptured > 1)
   {
-    mOsc.SetTable(mRawCaptureBuffer, nCaptured, tableSize);
+    mOsc1.SetTable(mRawCapture1, nCaptured, tableSize);
+    mOsc2.SetTable(mRawCapture2, nCaptured, tableSize);
+    mOsc3.SetTable(mRawCapture3, nCaptured, tableSize);
 
-    mUITableSize = mOsc.GetTableSize();
-    const float* finalTable = mOsc.GetTable();
+    // Apercu visuel des 3 corps, superposes
+    mUITableSize = mOsc1.GetTableSize();
+    const float* t1 = mOsc1.GetTable();
+    const float* t2 = mOsc2.GetTable();
+    const float* t3 = mOsc3.GetTable();
     for (int i = 0; i < mUITableSize; i++)
-      mUITableCopy[i] = finalTable[i];
+    {
+      mUITableCopy1[i] = t1[i];
+      mUITableCopy2[i] = t2[i];
+      mUITableCopy3[i] = t3[i];
+    }
     mTableUpdatedForUI.store(true);
   }
 }
 
+void TroisCorpsWave::UpdateEnvelopeParams()
+{
+  double attack = GetParam(kParamAttack)->Value();
+  double decay = GetParam(kParamDecay)->Value();
+  double sustain = GetParam(kParamSustain)->Value() / 100.0;
+  double release = GetParam(kParamRelease)->Value();
+  mEnv.SetADSR(attack, decay, sustain, release);
+}
+
 void TroisCorpsWave::OnReset()
 {
-  mOsc.SetSampleRate(GetSampleRate());
-  mOsc.SetBitDepth((int)GetParam(kParamBitDepth)->Value());
-  DoCapture(); // capture initiale au chargement, pour qu'il y ait deja un son avant meme d'appuyer sur Capture
+  mOsc1.SetSampleRate(GetSampleRate());
+  mOsc2.SetSampleRate(GetSampleRate());
+  mOsc3.SetSampleRate(GetSampleRate());
+  mOsc1.SetBitDepth((int)GetParam(kParamBitDepth)->Value());
+  mOsc2.SetBitDepth((int)GetParam(kParamBitDepth)->Value());
+  mOsc3.SetBitDepth((int)GetParam(kParamBitDepth)->Value());
+
+  mEnv.SetSampleRate(GetSampleRate());
+  UpdateEnvelopeParams();
+
+  DoCapture(); // capture initiale au chargement
 }
 
 void TroisCorpsWave::OnParamChange(int paramIdx)
 {
-  if (paramIdx == kParamBitDepth)
-    mOsc.SetBitDepth((int)GetParam(kParamBitDepth)->Value());
+  switch (paramIdx)
+  {
+    case kParamBitDepth:
+    {
+      int bits = (int)GetParam(kParamBitDepth)->Value();
+      mOsc1.SetBitDepth(bits);
+      mOsc2.SetBitDepth(bits);
+      mOsc3.SetBitDepth(bits);
+      break;
+    }
+    case kParamAttack:
+    case kParamDecay:
+    case kParamSustain:
+    case kParamRelease:
+      UpdateEnvelopeParams();
+      break;
+    default:
+      break;
+  }
 }
 
 void TroisCorpsWave::ProcessMidiMsg(const IMidiMsg& msg)
 {
   if (msg.StatusMsg() == IMidiMsg::kNoteOn && msg.Velocity() > 0)
   {
-    mOsc.NoteOn(msg.NoteNumber());
-    mFadeTarget = 1.f;
+    mOsc1.NoteOn(msg.NoteNumber());
+    mOsc2.NoteOn(msg.NoteNumber());
+    mOsc3.NoteOn(msg.NoteNumber());
+    mEnv.NoteOn();
   }
   else if (msg.StatusMsg() == IMidiMsg::kNoteOff ||
            (msg.StatusMsg() == IMidiMsg::kNoteOn && msg.Velocity() == 0))
   {
-    mFadeTarget = 0.f;
+    mEnv.NoteOff();
   }
 }
 
@@ -140,18 +203,25 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   if (mCaptureRequested.exchange(false))
     DoCapture();
 
+  float vol1 = (float)(GetParam(kParamVol1)->Value() / 100.0);
+  float vol2 = (float)(GetParam(kParamVol2)->Value() / 100.0);
+  float vol3 = (float)(GetParam(kParamVol3)->Value() / 100.0);
+
   for (int i = 0; i < nFrames; i++)
   {
-    if (mFadeGain < mFadeTarget) mFadeGain = std::min(mFadeGain + kFadeStep, mFadeTarget);
-    else if (mFadeGain > mFadeTarget) mFadeGain = std::max(mFadeGain - kFadeStep, mFadeTarget);
+    float envLevel = mEnv.Process();
 
-    if (mFadeGain <= 0.f && mFadeTarget <= 0.f)
-      mOsc.NoteOff();
+    if (!mEnv.IsActive())
+    {
+      mOsc1.NoteOff();
+      mOsc2.NoteOff();
+      mOsc3.NoteOff();
+    }
 
-    float sample = mOsc.Process() * mFadeGain;
+    float mix = (mOsc1.Process() * vol1 + mOsc2.Process() * vol2 + mOsc3.Process() * vol3) * envLevel;
 
-    outputs[0][i] = sample;
-    outputs[1][i] = sample;
+    outputs[0][i] = mix;
+    outputs[1][i] = mix;
   }
 }
 

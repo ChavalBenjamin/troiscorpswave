@@ -53,22 +53,24 @@ public:
   }
 
   // Simule "durationSeconds" a une resolution interne fine, et enregistre
-  // la position X du corps 1 (indice 0) dans outBuffer, un echantillon par
-  // pas de simulation. Retourne le nombre d'echantillons ecrits.
-  // NOTE RT-safety : cette fonction fait potentiellement plusieurs milliers
-  // de pas RK4 d'un coup (calcul de courte duree mais pas garanti "instantane").
-  // Elle est appelee sur le thread audio au moment du bouton Capture - un
-  // tres court glitch est possible sur des fenetres longues, a ameliorer
-  // plus tard si besoin (deplacer le calcul hors du thread audio).
-  int CaptureBody1X(double durationSeconds, float* outBuffer, int maxSamples)
+  // la position X des 3 corps SIMULTANEMENT (un seul passage de simulation -
+  // garantit que les 3 oscillateurs restent coherents entre eux, issus du
+  // meme instant chaotique plutot que de 3 simulations separees).
+  // NOTE RT-safety : cette fonction fait potentiellement plusieurs dizaines
+  // de milliers de pas RK4 d'un coup. Elle est appelee sur le thread audio
+  // au moment du bouton Capture - un tres court glitch est possible sur des
+  // fenetres longues, a ameliorer plus tard si besoin.
+  int CaptureAllBodiesX(double durationSeconds, float* outBuf1, float* outBuf2, float* outBuf3, int maxSamples)
   {
-    constexpr double kDt = 1.0 / 8000.0; // resolution interne, indep. du taux audio
+    constexpr double kDt = 1.0 / 8000.0;
     int nSteps = std::min((int)(durationSeconds / kDt), maxSamples);
 
     for (int i = 0; i < nSteps; i++)
     {
       Step(kDt);
-      outBuffer[i] = (float)mBodies[0].x;
+      outBuf1[i] = (float)mBodies[0].x;
+      outBuf2[i] = (float)mBodies[1].x;
+      outBuf3[i] = (float)mBodies[2].x;
     }
     return nSteps;
   }
