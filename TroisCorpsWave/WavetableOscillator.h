@@ -40,6 +40,20 @@ public:
       float sample = source[i0] * (1.f - frac) + source[i1] * frac;
       mTable[i] = sample / maxAbs;
     }
+
+    // Raccord de boucle : la fin d'une capture n'a aucune raison de tomber
+    // exactement sur la meme valeur que le debut - boucler tel quel cree un
+    // saut net a chaque cycle, qui sonne comme une dent de scie (harmoniques
+    // tres franches, pas naturel pour un contenu chaotique). On lisse la
+    // jonction en fondant progressivement la fin de la table vers le debut,
+    // sur une petite portion (ici 5%) de sa longueur.
+    int fadeLen = std::max(2, tableSize / 20);
+    for (int i = 0; i < fadeLen; i++)
+    {
+      float t = (float)i / (float)fadeLen; // 0..1 en approchant la fin de la table
+      int idx = tableSize - fadeLen + i;
+      mTable[idx] = mTable[idx] * (1.f - t) + mTable[0] * t;
+    }
   }
 
   void SetBitDepth(int bits) { mBitDepth = std::clamp(bits, 2, 16); }
