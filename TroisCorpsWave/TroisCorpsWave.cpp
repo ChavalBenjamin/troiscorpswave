@@ -5,12 +5,15 @@
 TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
 : iplug::Plugin(info, MakeConfig(kNumParams, 1))
 {
-  GetParam(kParamMass1)->InitDouble("Mass 1", 1., 0.1, 10., 0.01);
-  GetParam(kParamMass2)->InitDouble("Mass 2", 1., 0.1, 10., 0.01);
-  GetParam(kParamMass3)->InitDouble("Mass 3", 1., 0.1, 10., 0.01);
-  GetParam(kParamStartRadius)->InitDouble("Start Radius", 1.5, 0.3, 3., 0.01);
-  GetParam(kParamBoxSize)->InitDouble("Box Size", 4., 2., 10., 0.01);
-  GetParam(kParamCaptureWindow)->InitDouble("Capture Window", 0.3, 0.02, 2., 0.001, "s");
+  GetParam(kParamMass1)->InitDouble("Mass 1", 1., 0.05, 30., 0.01);
+  GetParam(kParamMass2)->InitDouble("Mass 2", 1., 0.05, 30., 0.01);
+  GetParam(kParamMass3)->InitDouble("Mass 3", 1., 0.05, 30., 0.01);
+  GetParam(kParamRadius1)->InitDouble("Radius 1", 1.5, 0.1, 6., 0.01);
+  GetParam(kParamRadius2)->InitDouble("Radius 2", 1.5, 0.1, 6., 0.01);
+  GetParam(kParamRadius3)->InitDouble("Radius 3", 1.5, 0.1, 6., 0.01);
+  GetParam(kParamOrbitalVelocity)->InitDouble("Orbital Vel", 0., 0., 5., 0.01);
+  GetParam(kParamBoxSize)->InitDouble("Box Size", 4., 1., 20., 0.01);
+  GetParam(kParamCaptureWindow)->InitDouble("Capture Window", 0.3, 0.02, 5., 0.001, "s");
   GetParam(kParamTableSize)->InitEnum("Table Size", 4, 7, "", IParam::kFlagsNone, "",
                                        "64", "128", "256", "512", "1024", "2048", "4096");
   GetParam(kParamBitDepth)->InitInt("Bit Depth", 16, 2, 16);
@@ -29,22 +32,23 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     const IRECT bounds = pGraphics->GetBounds();
     IRECT area = bounds.GetPadded(-20.f);
 
-    constexpr int kRows = 2, kCols = 4;
+    constexpr int kRows = 3, kCols = 4;
     auto Cell = [&](int row, int col) { return area.GetGridCell(row, col, kRows, kCols); };
 
-    pGraphics->AttachControl(new IVKnobControl(Cell(0, 0).GetCentredInside(55.f), kParamMass1, "Mass 1"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(0, 1).GetCentredInside(55.f), kParamMass2, "Mass 2"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(0, 2).GetCentredInside(55.f), kParamMass3, "Mass 3"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(0, 3).GetCentredInside(55.f), kParamStartRadius, "Radius"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(0, 0).GetCentredInside(50.f), kParamMass1, "Mass 1"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(0, 1).GetCentredInside(50.f), kParamMass2, "Mass 2"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(0, 2).GetCentredInside(50.f), kParamMass3, "Mass 3"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(0, 3).GetCentredInside(50.f), kParamOrbitalVelocity, "Orbital Vel"));
 
-    pGraphics->AttachControl(new IVKnobControl(Cell(1, 0).GetCentredInside(55.f), kParamBoxSize, "Box Size"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(1, 1).GetCentredInside(55.f), kParamCaptureWindow, "Window"));
-    pGraphics->AttachControl(new IVMenuButtonControl(Cell(1, 2).GetCentredInside(90.f, 30.f), kParamTableSize, "Table Size"));
-    pGraphics->AttachControl(new IVKnobControl(Cell(1, 3).GetCentredInside(55.f), kParamBitDepth, "Bit Depth"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(1, 0).GetCentredInside(50.f), kParamRadius1, "Radius 1"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(1, 1).GetCentredInside(50.f), kParamRadius2, "Radius 2"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(1, 2).GetCentredInside(50.f), kParamRadius3, "Radius 3"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(1, 3).GetCentredInside(50.f), kParamBoxSize, "Box Size"));
 
-    // Bouton Capture, centre sous la grille
-    IRECT captureArea = bounds.GetFromBottom(60.f);
-    pGraphics->AttachControl(new IVButtonControl(captureArea.GetCentredInside(140.f, 40.f),
+    pGraphics->AttachControl(new IVKnobControl(Cell(2, 0).GetCentredInside(50.f), kParamCaptureWindow, "Window"));
+    pGraphics->AttachControl(new IVMenuButtonControl(Cell(2, 1).GetCentredInside(90.f, 30.f), kParamTableSize, "Table Size"));
+    pGraphics->AttachControl(new IVKnobControl(Cell(2, 2).GetCentredInside(50.f), kParamBitDepth, "Bit Depth"));
+    pGraphics->AttachControl(new IVButtonControl(Cell(2, 3).GetCentredInside(90.f, 30.f),
       [this](IControl* pCaller) { RequestCapture(); }, "Capture"));
   };
 #endif
@@ -61,13 +65,16 @@ void TroisCorpsWave::DoCapture()
   double m1 = GetParam(kParamMass1)->Value();
   double m2 = GetParam(kParamMass2)->Value();
   double m3 = GetParam(kParamMass3)->Value();
-  double startRadius = GetParam(kParamStartRadius)->Value();
+  double r1 = GetParam(kParamRadius1)->Value();
+  double r2 = GetParam(kParamRadius2)->Value();
+  double r3 = GetParam(kParamRadius3)->Value();
+  double orbitalVel = GetParam(kParamOrbitalVelocity)->Value();
   double boxSize = GetParam(kParamBoxSize)->Value();
   double captureWindow = GetParam(kParamCaptureWindow)->Value();
 
   mEngine.SetMasses(m1, m2, m3);
   mEngine.SetBoxSize(boxSize);
-  mEngine.ResetToTriangle(startRadius);
+  mEngine.ResetBodies(r1, r2, r3, orbitalVel);
 
   int nCaptured = mEngine.CaptureBody1X(captureWindow, mRawCaptureBuffer, kMaxRawCapture);
 

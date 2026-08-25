@@ -33,16 +33,22 @@ public:
 
   void SetBoxSize(double size) { mBoxSize = std::max(0.5, size); }
 
-  // Place les 3 corps en triangle equilateral autour du centre, au repos.
-  void ResetToTriangle(double startRadius)
+  // Place les 3 corps a des rayons independants (permet par exemple un
+  // corps proche du centre, un moyen, un loin - configuration hierarchique),
+  // avec une vitesse tangentielle proportionnelle a orbitalVelocity : a 0,
+  // les corps demarrent immobiles (effondrement chaotique) ; en augmentant,
+  // on se rapproche d'un mouvement orbital regulier (rotation rigide).
+  void ResetBodies(double r1, double r2, double r3, double orbitalVelocity)
   {
+    double radii[3] = { r1, r2, r3 };
     for (int i = 0; i < 3; i++)
     {
       double angle = (2.0 * kPi / 3.0) * i;
-      mBodies[i].x = startRadius * std::cos(angle);
-      mBodies[i].y = startRadius * std::sin(angle);
-      mBodies[i].vx = 0.0;
-      mBodies[i].vy = 0.0;
+      mBodies[i].x = radii[i] * std::cos(angle);
+      mBodies[i].y = radii[i] * std::sin(angle);
+      // vitesse tangentielle = rotation rigide : v = omega * (-y, x)
+      mBodies[i].vx = -orbitalVelocity * mBodies[i].y;
+      mBodies[i].vy = orbitalVelocity * mBodies[i].x;
     }
   }
 

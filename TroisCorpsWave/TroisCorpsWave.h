@@ -19,11 +19,14 @@ enum EParams
   kParamMass1 = 0,
   kParamMass2,
   kParamMass3,
-  kParamStartRadius,   // taille du triangle de depart
-  kParamBoxSize,       // taille de la zone bornee (rebond sur les bords)
-  kParamCaptureWindow, // duree simulee capturee, en secondes
-  kParamTableSize,     // taille de la table d'onde (puissance de 2)
-  kParamBitDepth,      // reduction de bits (2-16)
+  kParamRadius1,        // rayon de depart du corps 1 (independant des 2 autres)
+  kParamRadius2,
+  kParamRadius3,
+  kParamOrbitalVelocity, // 0 = immobile au depart (effondrement chaotique), + = rotation reguliere
+  kParamBoxSize,        // taille de la zone bornee (rebond sur les bords)
+  kParamCaptureWindow,  // duree simulee capturee, en secondes
+  kParamTableSize,      // taille de la table d'onde (puissance de 2)
+  kParamBitDepth,       // reduction de bits (2-16)
   kNumParams
 };
 
