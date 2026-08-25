@@ -59,6 +59,11 @@ public:
   void SetBitDepth(int bits) { mBitDepth = std::clamp(bits, 2, 16); }
   void SetSampleRate(double sr) { mSampleRate = sr; }
 
+  // Pour l'affichage (WaveformPreviewControl) : donne acces en lecture a la
+  // table finale (deja reechantillonnee, lissee et normalisee).
+  const float* GetTable() const { return mTable; }
+  int GetTableSize() const { return mTableSize; }
+
   void NoteOn(int midiNote)
   {
     mFreq = 440.0 * std::pow(2.0, (midiNote - 69) / 12.0);

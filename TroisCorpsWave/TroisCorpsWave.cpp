@@ -30,7 +30,8 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
 
     const IRECT bounds = pGraphics->GetBounds();
-    IRECT area = bounds.GetPadded(-20.f);
+    IRECT controlsZone = bounds.GetFromTop(280.f).GetPadded(-20.f);
+    IRECT area = controlsZone;
 
     constexpr int kRows = 3, kCols = 4;
     auto Cell = [&](int row, int col) { return area.GetGridCell(row, col, kRows, kCols); };
@@ -50,12 +51,26 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(Cell(2, 2).GetCentredInside(50.f), kParamBitDepth, "Bit Depth"));
     pGraphics->AttachControl(new IVButtonControl(Cell(2, 3).GetCentredInside(90.f, 30.f),
       [this](IControl* pCaller) { RequestCapture(); }, "Capture"));
+
+    // Aperçu de la table capturee, sur l'espace restant en bas
+    IRECT waveArea = bounds.GetFromBottom(bounds.H() - 280.f).GetPadded(-15.f);
+    mWaveformView = new WaveformPreviewControl(waveArea);
+    pGraphics->AttachControl(mWaveformView);
   };
 #endif
 
 #if IPLUG_DSP
   OnReset();
 #endif
+}
+
+void TroisCorpsWave::OnIdle()
+{
+  if (mTableUpdatedForUI.exchange(false) && mWaveformView)
+  {
+    mWaveformView->SetWaveform(mUITableCopy, mUITableSize);
+    mWaveformView->SetDirty(false);
+  }
 }
 
 #if IPLUG_DSP
@@ -82,7 +97,15 @@ void TroisCorpsWave::DoCapture()
   int tableSize = 64 << tableSizeIdx; // 0->64, 1->128, ... 6->4096
 
   if (nCaptured > 1)
+  {
     mOsc.SetTable(mRawCaptureBuffer, nCaptured, tableSize);
+
+    mUITableSize = mOsc.GetTableSize();
+    const float* finalTable = mOsc.GetTable();
+    for (int i = 0; i < mUITableSize; i++)
+      mUITableCopy[i] = finalTable[i];
+    mTableUpdatedForUI.store(true);
+  }
 }
 
 void TroisCorpsWave::OnReset()

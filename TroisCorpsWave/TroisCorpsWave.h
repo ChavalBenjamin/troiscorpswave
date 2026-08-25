@@ -3,6 +3,7 @@
 #include "IPlug_include_in_plug_hdr.h"
 #include "ThreeBodyEngine.h"
 #include "WavetableOscillator.h"
+#include "WaveformPreviewControl.h"
 #include <atomic>
 
 // ============================================================================
@@ -38,6 +39,9 @@ class TroisCorpsWave final : public iplug::Plugin
 public:
   TroisCorpsWave(const InstanceInfo& info);
 
+  void OnIdle() override;
+  void OnUIClose() override { mWaveformView = nullptr; }
+
 #if IPLUG_DSP
   void ProcessBlock(sample** inputs, sample** outputs, int nFrames) override;
   void ProcessMidiMsg(const IMidiMsg& msg) override;
@@ -47,6 +51,11 @@ public:
 
 private:
   void RequestCapture() { mCaptureRequested = true; }
+
+  WaveformPreviewControl* mWaveformView = nullptr;
+  std::atomic<bool> mTableUpdatedForUI { false };
+  float mUITableCopy[WavetableOscillator::kMaxTableSize] = { 0.f };
+  int mUITableSize = 0;
 
 #if IPLUG_DSP
   void DoCapture();
