@@ -78,7 +78,16 @@ private:
   WavetableOscillator mOsc1, mOsc2, mOsc3;
   ADSREnvelope mEnv;
 
-  std::atomic<bool> mCaptureRequested { false };
+  std::atomic<bool> mCaptureRequested { false }; // bouton Capture manuel (UI thread)
+
+  // Delai avant recapture automatique suite a un changement de parametre :
+  // chaque nouveau changement repousse ce compte a rebours. Tant qu'on
+  // continue de tourner un bouton (ou plusieurs a la fois), la capture
+  // n'est pas relancee - elle n'a lieu qu'une fois que tout s'est stabilise
+  // pendant kDebounceMs. Evite les recaptures en rafale et les incoherences
+  // si plusieurs parametres changent au meme instant.
+  int mCaptureDebounceSamples = 0;
+  static constexpr double kDebounceMs = 80.0;
 
   static constexpr int kMaxRawCapture = 80000; // 10s a 8000Hz de resolution de capture
   float mRawCapture1[kMaxRawCapture];

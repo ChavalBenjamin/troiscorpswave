@@ -180,7 +180,12 @@ void TroisCorpsWave::OnParamChange(int paramIdx)
     case kParamBoxSize:
     case kParamCaptureWindow:
     case kParamTableSize:
-      mCaptureRequested = true;
+      // On ne capture pas immediatement : on repousse un compte a rebours.
+      // Si d'autres parametres changent juste apres (bouton tourne en
+      // continu, ou plusieurs boutons a la fois), ce compte est repousse
+      // a nouveau - une seule capture aura lieu, une fois que tout s'est
+      // stabilise (voir ProcessBlock).
+      mCaptureDebounceSamples = (int)(kDebounceMs * 0.001 * GetSampleRate());
       break;
 
     case kParamBitDepth:
@@ -221,7 +226,19 @@ void TroisCorpsWave::ProcessMidiMsg(const IMidiMsg& msg)
 void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
 {
   if (mCaptureRequested.exchange(false))
+  {
     DoCapture();
+    mCaptureDebounceSamples = 0; // annule un delai en attente si Capture manuel presse
+  }
+  else if (mCaptureDebounceSamples > 0)
+  {
+    mCaptureDebounceSamples -= nFrames;
+    if (mCaptureDebounceSamples <= 0)
+    {
+      mCaptureDebounceSamples = 0;
+      DoCapture();
+    }
+  }
 
   float vol1 = (float)(GetParam(kParamVol1)->Value() / 100.0);
   float vol2 = (float)(GetParam(kParamVol2)->Value() / 100.0);
