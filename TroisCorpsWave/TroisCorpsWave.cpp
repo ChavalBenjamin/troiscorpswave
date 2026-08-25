@@ -173,6 +173,16 @@ void TroisCorpsWave::OnParamChange(int paramIdx)
 {
   switch (paramIdx)
   {
+    case kParamMass1: case kParamMass2: case kParamMass3:
+    case kParamRadius1: case kParamRadius2: case kParamRadius3:
+    case kParamAngle1: case kParamAngle2: case kParamAngle3:
+    case kParamOrbitalVelocity:
+    case kParamBoxSize:
+    case kParamCaptureWindow:
+    case kParamTableSize:
+      mCaptureRequested = true;
+      break;
+
     case kParamBitDepth:
     {
       int bits = (int)GetParam(kParamBitDepth)->Value();
