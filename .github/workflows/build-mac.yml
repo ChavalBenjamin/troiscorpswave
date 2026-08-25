@@ -23,9 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [TemplateProject]
+        project: [TroisCorpsWave]
         # Add more projects here:
-        # project: [TemplateProject, VisageTemplate]
+        # project: [TroisCorpsWave, VisageTemplate]
 
     steps:
     - name: Check out repository
@@ -130,9 +130,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [TemplateProject]
+        project: [TroisCorpsWave]
         # Add more projects here:
-        # project: [TemplateProject, VisageTemplate]
+        # project: [TroisCorpsWave, VisageTemplate]
 
     steps:
       - name: Download artifact
