@@ -4,85 +4,133 @@
 #include <algorithm>
 
 // ============================================================================
-// WavetableOscillator
+// ThreeBodyEngine
 //
-// Rejoue en boucle une table d'onde (capturee depuis le moteur physique),
-// a la hauteur correspondant a la note MIDI jouee. Inclut un reechantillonnage
-// propre (interpolation lineaire) vers une taille de table reglable, une
-// normalisation d'amplitude, et une reduction de bits optionnelle (bitcrush).
+// Simule 3 corps en interaction gravitationnelle mutuelle (probleme a 3
+// corps, chaotique) dans un plan 2D borne (rebond elastique sur les bords).
+//
+// Usage prevu : ResetToTriangle() pour placer les corps, puis
+// CaptureBody1X() pour simuler une fenetre de temps et enregistrer la
+// position X du corps 1 dans un buffer (destine a devenir une table d'onde).
 // ============================================================================
 
-class WavetableOscillator
+class ThreeBodyEngine
 {
 public:
-  static constexpr int kMaxTableSize = 4096;
-
-  // Recopie "source" (nSourceSamples points) dans la table interne,
-  // reechantillonnee a "tableSize" points par interpolation lineaire, et
-  // normalisee en amplitude (-1..1).
-  void SetTable(const float* source, int nSourceSamples, int tableSize)
+  struct Body
   {
-    if (nSourceSamples <= 1) return;
+    double x = 0.0, y = 0.0;
+    double vx = 0.0, vy = 0.0;
+    double mass = 1.0;
+  };
 
-    tableSize = std::clamp(tableSize, 4, kMaxTableSize);
-    mTableSize = tableSize;
+  void SetMasses(double m1, double m2, double m3)
+  {
+    mBodies[0].mass = std::max(0.01, m1);
+    mBodies[1].mass = std::max(0.01, m2);
+    mBodies[2].mass = std::max(0.01, m3);
+  }
 
-    float maxAbs = 1e-9f;
-    for (int i = 0; i < nSourceSamples; i++)
-      maxAbs = std::max(maxAbs, std::abs(source[i]));
+  void SetBoxSize(double size) { mBoxSize = std::max(0.5, size); }
 
-    for (int i = 0; i < tableSize; i++)
+  // Place les 3 corps en triangle equilateral autour du centre, au repos.
+  void ResetToTriangle(double startRadius)
+  {
+    for (int i = 0; i < 3; i++)
     {
-      float srcPos = (float)i / (float)tableSize * (float)nSourceSamples;
-      int i0 = (int)srcPos;
-      int i1 = std::min(i0 + 1, nSourceSamples - 1);
-      float frac = srcPos - (float)i0;
-      float sample = source[i0] * (1.f - frac) + source[i1] * frac;
-      mTable[i] = sample / maxAbs;
+      double angle = (2.0 * kPi / 3.0) * i;
+      mBodies[i].x = startRadius * std::cos(angle);
+      mBodies[i].y = startRadius * std::sin(angle);
+      mBodies[i].vx = 0.0;
+      mBodies[i].vy = 0.0;
     }
   }
 
-  void SetBitDepth(int bits) { mBitDepth = std::clamp(bits, 2, 16); }
-  void SetSampleRate(double sr) { mSampleRate = sr; }
-
-  void NoteOn(int midiNote)
+  // Simule "durationSeconds" a une resolution interne fine, et enregistre
+  // la position X du corps 1 (indice 0) dans outBuffer, un echantillon par
+  // pas de simulation. Retourne le nombre d'echantillons ecrits.
+  // NOTE RT-safety : cette fonction fait potentiellement plusieurs milliers
+  // de pas RK4 d'un coup (calcul de courte duree mais pas garanti "instantane").
+  // Elle est appelee sur le thread audio au moment du bouton Capture - un
+  // tres court glitch est possible sur des fenetres longues, a ameliorer
+  // plus tard si besoin (deplacer le calcul hors du thread audio).
+  int CaptureBody1X(double durationSeconds, float* outBuffer, int maxSamples)
   {
-    mFreq = 440.0 * std::pow(2.0, (midiNote - 69) / 12.0);
-    mPhase = 0.0;
-    mActive = true;
-  }
+    constexpr double kDt = 1.0 / 8000.0; // resolution interne, indep. du taux audio
+    int nSteps = std::min((int)(durationSeconds / kDt), maxSamples);
 
-  void NoteOff() { mActive = false; }
-  bool IsActive() const { return mActive; }
-
-  float Process()
-  {
-    if (!mActive || mTableSize <= 0) return 0.f;
-
-    float phaseInTable = (float)mPhase * (float)mTableSize;
-    int i0 = (int)phaseInTable % mTableSize;
-    int i1 = (i0 + 1) % mTableSize;
-    float frac = phaseInTable - (float)(int)phaseInTable;
-    float sample = mTable[i0] * (1.f - frac) + mTable[i1] * frac;
-
-    // Reduction de bits (quantification de l'amplitude) - a 16 bits c'est
-    // quasi transparent, plus le chiffre baisse plus l'effet "lo-fi" est marque.
-    float levels = (float)(1 << mBitDepth);
-    sample = std::round(sample * levels * 0.5f) / (levels * 0.5f);
-
-    mPhase += mFreq / mSampleRate;
-    if (mPhase >= 1.0) mPhase -= 1.0;
-
-    return sample;
+    for (int i = 0; i < nSteps; i++)
+    {
+      Step(kDt);
+      outBuffer[i] = (float)mBodies[0].x;
+    }
+    return nSteps;
   }
 
 private:
-  float mTable[kMaxTableSize] = { 0.f };
-  int mTableSize = 0;
+  static constexpr double kPi = 3.14159265358979323846;
+  static constexpr double kG = 1.0;          // constante gravitationnelle interne
+  static constexpr double kSoftening = 0.05; // evite les forces infinies en cas de quasi-collision
 
-  double mPhase = 0.0;
-  double mFreq = 440.0;
-  double mSampleRate = 44100.0;
-  bool mActive = false;
-  int mBitDepth = 16;
+  Body mBodies[3];
+  double mBoxSize = 4.0;
+
+  void ComputeAccelerations(double ax[3], double ay[3]) const
+  {
+    for (int i = 0; i < 3; i++) { ax[i] = 0.0; ay[i] = 0.0; }
+
+    for (int i = 0; i < 3; i++)
+    {
+      for (int j = 0; j < 3; j++)
+      {
+        if (i == j) continue;
+        double dx = mBodies[j].x - mBodies[i].x;
+        double dy = mBodies[j].y - mBodies[i].y;
+        double distSq = dx * dx + dy * dy + kSoftening * kSoftening;
+        double dist = std::sqrt(distSq);
+        double force = kG * mBodies[j].mass / (distSq * dist);
+        ax[i] += force * dx;
+        ay[i] += force * dy;
+      }
+    }
+  }
+
+  void Step(double dt)
+  {
+    double x0[3], y0[3], vx0[3], vy0[3];
+    for (int i = 0; i < 3; i++) { x0[i] = mBodies[i].x; y0[i] = mBodies[i].y; vx0[i] = mBodies[i].vx; vy0[i] = mBodies[i].vy; }
+
+    double ax1[3], ay1[3]; ComputeAccelerations(ax1, ay1);
+    double k1x[3], k1y[3], k1vx[3], k1vy[3];
+    for (int i = 0; i < 3; i++) { k1x[i] = vx0[i]; k1y[i] = vy0[i]; k1vx[i] = ax1[i]; k1vy[i] = ay1[i]; }
+
+    for (int i = 0; i < 3; i++) { mBodies[i].x = x0[i] + k1x[i] * dt * 0.5; mBodies[i].y = y0[i] + k1y[i] * dt * 0.5; }
+    double ax2[3], ay2[3]; ComputeAccelerations(ax2, ay2);
+    double k2x[3], k2y[3], k2vx[3], k2vy[3];
+    for (int i = 0; i < 3; i++) { k2x[i] = vx0[i] + k1vx[i] * dt * 0.5; k2y[i] = vy0[i] + k1vy[i] * dt * 0.5; k2vx[i] = ax2[i]; k2vy[i] = ay2[i]; }
+
+    for (int i = 0; i < 3; i++) { mBodies[i].x = x0[i] + k2x[i] * dt * 0.5; mBodies[i].y = y0[i] + k2y[i] * dt * 0.5; }
+    double ax3[3], ay3[3]; ComputeAccelerations(ax3, ay3);
+    double k3x[3], k3y[3], k3vx[3], k3vy[3];
+    for (int i = 0; i < 3; i++) { k3x[i] = vx0[i] + k2vx[i] * dt * 0.5; k3y[i] = vy0[i] + k2vy[i] * dt * 0.5; k3vx[i] = ax3[i]; k3vy[i] = ay3[i]; }
+
+    for (int i = 0; i < 3; i++) { mBodies[i].x = x0[i] + k3x[i] * dt; mBodies[i].y = y0[i] + k3y[i] * dt; }
+    double ax4[3], ay4[3]; ComputeAccelerations(ax4, ay4);
+    double k4x[3], k4y[3], k4vx[3], k4vy[3];
+    for (int i = 0; i < 3; i++) { k4x[i] = vx0[i] + k3vx[i] * dt; k4y[i] = vy0[i] + k3vy[i] * dt; k4vx[i] = ax4[i]; k4vy[i] = ay4[i]; }
+
+    for (int i = 0; i < 3; i++)
+    {
+      mBodies[i].x = x0[i] + (dt / 6.0) * (k1x[i] + 2 * k2x[i] + 2 * k3x[i] + k4x[i]);
+      mBodies[i].y = y0[i] + (dt / 6.0) * (k1y[i] + 2 * k2y[i] + 2 * k3y[i] + k4y[i]);
+      mBodies[i].vx = vx0[i] + (dt / 6.0) * (k1vx[i] + 2 * k2vx[i] + 2 * k3vx[i] + k4vx[i]);
+      mBodies[i].vy = vy0[i] + (dt / 6.0) * (k1vy[i] + 2 * k2vy[i] + 2 * k3vy[i] + k4vy[i]);
+
+      // Rebond elastique sur les murs d'une boite carree centree sur l'origine
+      if (mBodies[i].x > mBoxSize)  { mBodies[i].x = mBoxSize;  mBodies[i].vx = -mBodies[i].vx; }
+      if (mBodies[i].x < -mBoxSize) { mBodies[i].x = -mBoxSize; mBodies[i].vx = -mBodies[i].vx; }
+      if (mBodies[i].y > mBoxSize)  { mBodies[i].y = mBoxSize;  mBodies[i].vy = -mBodies[i].vy; }
+      if (mBodies[i].y < -mBoxSize) { mBodies[i].y = -mBoxSize; mBodies[i].vy = -mBodies[i].vy; }
+    }
+  }
 };
