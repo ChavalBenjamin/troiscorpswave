@@ -47,6 +47,7 @@ enum EParams
   kParamCC1Number,
   kParamCC2Number,
   kParamCC3Number,
+  kParamLFORate, // 0.001 - 1 : ralentit la boucle LFO/animation par rapport a sa vitesse max
 
   kNumParams
 };

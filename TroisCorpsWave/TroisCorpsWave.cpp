@@ -45,6 +45,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
   GetParam(kParamCC1Number)->InitInt("CC 1", 20, 0, 127);
   GetParam(kParamCC2Number)->InitInt("CC 2", 21, 0, 127);
   GetParam(kParamCC3Number)->InitInt("CC 3", 22, 0, 127);
+  GetParam(kParamLFORate)->InitDouble("LFO Rate", 0.1, 0.001, 1., 0.001);
 
 #if IPLUG_EDITOR
   mMakeGraphicsFunc = [&]() {
@@ -65,40 +66,68 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
       return r;
     };
 
+    // --- Panneau de fond distinct pour toute la zone "banque" (onglets +
+    // --- grille + apercu), pour bien la separer visuellement de la zone
+    // --- "parametres generaux" plus bas.
+    IRECT bankPanel(bounds.L, bounds.T, bounds.R, bounds.T + 420.f);
+    pGraphics->AttachControl(new IPanelControl(bankPanel, IColor(255, 45, 45, 50)));
+
     // --- Rangee d'onglets (Bank 1/2/3), avec surbrillance de l'onglet actif ---
     IRECT tabRow = NextSection(50.f).GetPadded(-10.f);
     pGraphics->AttachControl(new IVTabSwitchControl(tabRow, kParamActiveTab,
       { "Bank 1", "Bank 2", "Bank 3" }));
 
-    // --- Grille de 13 controles physiques, dupliquee x3 (une par banque), ---
-    // --- seule celle de l'onglet actif est visible au depart (Bank 1)    ---
+    // --- Grille des 9 parametres par corps (Mass/Radius/Angle x 3 corps),
+    // --- alignee en colonnes par numero de corps (1, 2, 3) - plus la
+    // --- colonne laterale des 4 parametres generaux de la banque
+    // --- (Orbital Vel, Box, Window, Table Size), separee visuellement.
     IRECT bankGrid = NextSection(260.f).GetPadded(-10.f);
-    const char* bankLabels[kNumBankParams] = {
-      "Mass1", "Mass2", "Mass3", "Radius1", "Radius2", "Radius3",
-      "Angle1", "Angle2", "Angle3", "OrbVel", "Box", "Window", "TblSz"
+    IRECT mainGrid(bankGrid.L, bankGrid.T, bankGrid.L + bankGrid.W() * 0.72f, bankGrid.B);
+    IRECT sideCol(mainGrid.R, bankGrid.T, bankGrid.R, bankGrid.B);
+
+    const char* rowPrefix[3] = { "Mass", "Radius", "Angle" };
+    int rowOffsets[3][3] = {
+      { kOffMass1, kOffMass2, kOffMass3 },
+      { kOffRadius1, kOffRadius2, kOffRadius3 },
+      { kOffAngle1, kOffAngle2, kOffAngle3 }
     };
-    int bankOrder[kNumBankParams] = {
-      kOffMass1, kOffMass2, kOffMass3, kOffRadius1, kOffRadius2, kOffRadius3,
-      kOffAngle1, kOffAngle2, kOffAngle3, kOffOrbitalVel, kOffBoxSize, kOffCaptureWindow, kOffTableSize
-    };
+
+    int sideOffsets[4] = { kOffOrbitalVel, kOffBoxSize, kOffCaptureWindow, kOffTableSize };
+    const char* sideLabels[4] = { "OrbVel", "Box", "Window", "TblSz" };
 
     IRECT bankWaveArea = NextSection(110.f).GetPadded(-10.f);
 
     for (int b = 0; b < 3; b++)
     {
-      for (int k = 0; k < kNumBankParams; k++)
+      char label[16];
+
+      for (int row = 0; row < 3; row++)
       {
-        int row = k / 4;
-        int col = k % 4;
-        int offset = bankOrder[k];
+        for (int col = 0; col < 3; col++)
+        {
+          int offset = rowOffsets[row][col];
+          int paramIdx = BankParam(b, offset);
+          IRECT cell = mainGrid.GetGridCell(row, col, 3, 3).GetCentredInside(46.f);
+          std::snprintf(label, sizeof(label), "%s%d", rowPrefix[row], col + 1);
+
+          IControl* ctrl = new IVKnobControl(cell, paramIdx, label);
+          pGraphics->AttachControl(ctrl);
+          ctrl->Hide(b != 0);
+          mBankControls[b][offset] = ctrl;
+        }
+      }
+
+      for (int s = 0; s < 4; s++)
+      {
+        int offset = sideOffsets[s];
         int paramIdx = BankParam(b, offset);
-        IRECT baseCell = bankGrid.GetGridCell(row, col, 4, 4);
+        IRECT cell = sideCol.GetGridCell(s, 0, 4, 1);
 
         IControl* ctrl;
         if (offset == kOffTableSize)
-          ctrl = new IVMenuButtonControl(baseCell.GetCentredInside(80.f, 26.f), paramIdx, bankLabels[k]);
+          ctrl = new IVMenuButtonControl(cell.GetCentredInside(75.f, 24.f), paramIdx, sideLabels[s]);
         else
-          ctrl = new IVKnobControl(baseCell.GetCentredInside(44.f), paramIdx, bankLabels[k]);
+          ctrl = new IVKnobControl(cell.GetCentredInside(40.f), paramIdx, sideLabels[s]);
 
         pGraphics->AttachControl(ctrl);
         ctrl->Hide(b != 0);
@@ -112,6 +141,10 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     }
 
     // --- Parametres partages : Vol 1/2/3 + Bit Depth ---
+    // --- Panneau de fond distinct pour la zone "parametres generaux" ---
+    IRECT generalPanel(bounds.L, bounds.T + y, bounds.R, bounds.T + y + 130.f);
+    pGraphics->AttachControl(new IPanelControl(generalPanel, IColor(255, 55, 55, 60)));
+
     IRECT sharedRow1 = NextSection(65.f).GetPadded(-10.f);
     pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 0, 1, 4).GetCentredInside(46.f), kParamVol1, "Vol 1"));
     pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 1, 1, 4).GetCentredInside(46.f), kParamVol2, "Vol 2"));
@@ -140,11 +173,14 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(mMorphWaveView);
 
     // Colonne droite : selecteur de banque LFO (1/2/3, independant des
-    // onglets d'edition) puis animation des 3 corps de cette banque.
+    // onglets d'edition), reglage de vitesse, puis animation des 3 corps.
     IRECT lfoTabRow = lfoCol.GetFromTop(50.f).GetPadded(-8.f);
     pGraphics->AttachControl(new IVTabSwitchControl(lfoTabRow, kParamLFOBank, { "1", "2", "3" }));
 
-    IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 50.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
+    IRECT lfoRateRow = IRECT(lfoCol.L, lfoCol.T + 50.f, lfoCol.R, lfoCol.T + 110.f).GetPadded(-8.f);
+    pGraphics->AttachControl(new IVKnobControl(lfoRateRow.GetCentredInside(46.f), kParamLFORate, "LFO Rate"));
+
+    IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 110.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
     mAnimView = new BodyAnimationControl(animArea);
     pGraphics->AttachControl(mAnimView);
   };
@@ -189,9 +225,13 @@ void TroisCorpsWave::OnIdle()
     if (mBankUIUpdated[b].exchange(false) && mBankWaveView[b])
     {
       mBankWaveView[b]->SetWaveforms(mBankUICopy1[b], mBankUICopy2[b], mBankUICopy3[b], mBankUISize[b]);
-      mBankWaveView[b]->SetDirty(false);
       anyBankJustUpdated = true;
     }
+    // Toujours redessiner (peu couteux), meme si les donnees n'ont pas
+    // change depuis la derniere fois - evite un graphique fige/vide apres
+    // que la fenetre du plugin ait ete masquee puis reaffichee (ex.
+    // changement d'application puis retour sur Reaper).
+    if (mBankWaveView[b]) mBankWaveView[b]->SetDirty(false);
   }
 
   if (mMorphWaveView)
@@ -238,8 +278,8 @@ void TroisCorpsWave::OnIdle()
       }
 
       mMorphWaveView->SetWaveforms(blend1, blend2, blend3, kPreviewRes);
-      mMorphWaveView->SetDirty(false);
     }
+    mMorphWaveView->SetDirty(false); // toujours, meme sans recalcul (voir plus haut)
   }
 
   // Anime les 3 corps de la banque LFO selectionnee, en continu.
@@ -454,7 +494,8 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
 
   int lfoBank = (int)GetParam(kParamLFOBank)->Value();
   double captureWindow = GetParam(BankParam(lfoBank, kOffCaptureWindow))->Value();
-  double phaseInc = (1.0 / GetSampleRate()) / std::max(0.001, captureWindow);
+  double lfoRate = GetParam(kParamLFORate)->Value();
+  double phaseInc = (1.0 / GetSampleRate()) / std::max(0.001, captureWindow) * lfoRate;
   int cc1Number = (int)GetParam(kParamCC1Number)->Value();
   int cc2Number = (int)GetParam(kParamCC2Number)->Value();
   int cc3Number = (int)GetParam(kParamCC3Number)->Value();
