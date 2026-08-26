@@ -47,6 +47,12 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
   GetParam(kParamCC3Number)->InitInt("CC 3", 22, 0, 127);
   GetParam(kParamLFORate)->InitDouble("LFO Rate", 0.1, 0.001, 1., 0.001);
 
+  const char* modOptions[4] = { "None", "Body 1", "Body 2", "Body 3" };
+  GetParam(kParamModVol1Src)->InitEnum("Mod Vol1", 0, 4, "", IParam::kFlagsNone, "", modOptions[0], modOptions[1], modOptions[2], modOptions[3]);
+  GetParam(kParamModVol2Src)->InitEnum("Mod Vol2", 0, 4, "", IParam::kFlagsNone, "", modOptions[0], modOptions[1], modOptions[2], modOptions[3]);
+  GetParam(kParamModVol3Src)->InitEnum("Mod Vol3", 0, 4, "", IParam::kFlagsNone, "", modOptions[0], modOptions[1], modOptions[2], modOptions[3]);
+  GetParam(kParamModMorphSrc)->InitEnum("Mod Morph", 0, 4, "", IParam::kFlagsNone, "", modOptions[0], modOptions[1], modOptions[2], modOptions[3]);
+
 #if IPLUG_EDITOR
   mMakeGraphicsFunc = [&]() {
     return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS,
@@ -151,13 +157,19 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
 
     // --- Parametres partages : Vol 1/2/3 + Bit Depth ---
     // --- Panneau de fond distinct pour la zone "parametres generaux" ---
-    IRECT generalPanel(bounds.L, bounds.T + y, bounds.R, bounds.T + y + 130.f);
+    IRECT generalPanel(bounds.L, bounds.T + y, bounds.R, bounds.T + y + 195.f);
     pGraphics->AttachControl(new IPanelControl(generalPanel, IColor(255, 75, 75, 85)));
 
     IRECT sharedRow1 = NextSection(65.f).GetPadded(-10.f);
-    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 0, 1, 4).GetCentredInside(58.f), kParamVol1, "Vol 1", knobStyle));
-    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 1, 1, 4).GetCentredInside(58.f), kParamVol2, "Vol 2", knobStyle));
-    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 2, 1, 4).GetCentredInside(58.f), kParamVol3, "Vol 3", knobStyle));
+    IRECT vol1Cell = sharedRow1.GetGridCell(0, 0, 1, 4).GetCentredInside(58.f);
+    IRECT vol2Cell = sharedRow1.GetGridCell(0, 1, 1, 4).GetCentredInside(58.f);
+    IRECT vol3Cell = sharedRow1.GetGridCell(0, 2, 1, 4).GetCentredInside(58.f);
+    mModVol1Knob = new ModulatableKnobControl(vol1Cell, kParamVol1, "Vol 1", knobStyle);
+    mModVol2Knob = new ModulatableKnobControl(vol2Cell, kParamVol2, "Vol 2", knobStyle);
+    mModVol3Knob = new ModulatableKnobControl(vol3Cell, kParamVol3, "Vol 3", knobStyle);
+    pGraphics->AttachControl(mModVol1Knob);
+    pGraphics->AttachControl(mModVol2Knob);
+    pGraphics->AttachControl(mModVol3Knob);
     pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 3, 1, 4).GetCentredInside(58.f), kParamBitDepth, "BitDepth", knobStyle));
 
     // --- Parametres partages : ADSR ---
@@ -167,6 +179,14 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 2, 1, 4).GetCentredInside(58.f), kParamSustain, "Sustain", knobStyle));
     pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 3, 1, 4).GetCentredInside(58.f), kParamRelease, "Release", knobStyle));
 
+    // --- Petite matrice de modulation : Vol1/2/3 + Morph, chacun pilotable
+    // --- par un des 3 corps de la banque LFO (ou aucun, par defaut).
+    IRECT modRow = NextSection(65.f).GetPadded(-10.f);
+    pGraphics->AttachControl(new IVMenuButtonControl(modRow.GetGridCell(0, 0, 1, 4).GetCentredInside(85.f, 26.f), kParamModVol1Src, "Mod Vol1"));
+    pGraphics->AttachControl(new IVMenuButtonControl(modRow.GetGridCell(0, 1, 1, 4).GetCentredInside(85.f, 26.f), kParamModVol2Src, "Mod Vol2"));
+    pGraphics->AttachControl(new IVMenuButtonControl(modRow.GetGridCell(0, 2, 1, 4).GetCentredInside(85.f, 26.f), kParamModVol3Src, "Mod Vol3"));
+    pGraphics->AttachControl(new IVMenuButtonControl(modRow.GetGridCell(0, 3, 1, 4).GetCentredInside(85.f, 26.f), kParamModMorphSrc, "Mod Morph"));
+
     // --- Zone du bas, coupee en deux colonnes : Morph (gauche) / LFO+Anime (droite) ---
     IRECT lowerArea(bounds.L, bounds.T + y, bounds.R, bounds.B);
     IRECT morphCol(lowerArea.L, lowerArea.T, lowerArea.L + lowerArea.W() * 0.6f, lowerArea.B);
@@ -175,7 +195,8 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     // Colonne gauche : slider de morphing (0 = banque1, 63 = banque2, 127 = banque3)
     // puis apercu du resultat du morphing en direct.
     IRECT morphRow = morphCol.GetFromTop(100.f).GetPadded(-10.f);
-    pGraphics->AttachControl(new IVSliderControl(morphRow, kParamMorph, "Morph", DEFAULT_STYLE, true, EDirection::Horizontal));
+    mModMorphSlider = new ModulatableSliderControl(morphRow, kParamMorph, "Morph", DEFAULT_STYLE, true, EDirection::Horizontal);
+    pGraphics->AttachControl(mModMorphSlider);
 
     IRECT morphWaveArea = IRECT(morphCol.L, morphCol.T + 100.f, morphCol.R, morphCol.B).GetPadded(-10.f);
     mMorphWaveView = new WaveformPreviewControl(morphWaveArea);
@@ -301,6 +322,30 @@ void TroisCorpsWave::OnIdle()
       mUIBodyX[2].load(), mUIBodyY[2].load(),
       mUIAnimScale.load());
     mAnimView->SetDirty(false);
+  }
+
+  // Vol1/2/3 et Morph : quand une modulation est active, le controle
+  // lui-meme affiche (position + valeur) le resultat module en direct,
+  // sans jamais toucher au vrai parametre de base.
+  if (mModVol1Knob)
+  {
+    bool active = (int)GetParam(kParamModVol1Src)->Value() != 0;
+    mModVol1Knob->SetModulation(mUIModVol1Value.load(), active);
+  }
+  if (mModVol2Knob)
+  {
+    bool active = (int)GetParam(kParamModVol2Src)->Value() != 0;
+    mModVol2Knob->SetModulation(mUIModVol2Value.load(), active);
+  }
+  if (mModVol3Knob)
+  {
+    bool active = (int)GetParam(kParamModVol3Src)->Value() != 0;
+    mModVol3Knob->SetModulation(mUIModVol3Value.load(), active);
+  }
+  if (mModMorphSlider)
+  {
+    bool active = (int)GetParam(kParamModMorphSrc)->Value() != 0;
+    mModMorphSlider->SetModulation(mUIModMorphValue.load(), active);
   }
 }
 
@@ -501,6 +546,7 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   float vol1 = (float)(GetParam(kParamVol1)->Value() / 100.0);
   float vol2 = (float)(GetParam(kParamVol2)->Value() / 100.0);
   float vol3 = (float)(GetParam(kParamVol3)->Value() / 100.0);
+  float baseMorph = (float)GetParam(kParamMorph)->Value();
 
   int lfoBank = (int)GetParam(kParamLFOBank)->Value();
   double captureWindow = GetParam(BankParam(lfoBank, kOffCaptureWindow))->Value();
@@ -511,24 +557,18 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   int cc3Number = (int)GetParam(kParamCC3Number)->Value();
   float animScale = mBankAnimScale[lfoBank];
 
+  int modVol1Src = (int)GetParam(kParamModVol1Src)->Value();
+  int modVol2Src = (int)GetParam(kParamModVol2Src)->Value();
+  int modVol3Src = (int)GetParam(kParamModVol3Src)->Value();
+  int modMorphSrc = (int)GetParam(kParamModMorphSrc)->Value();
+  bool anyModActive = modVol1Src || modVol2Src || modVol3Src || modMorphSrc;
+
   for (int i = 0; i < nFrames; i++)
   {
-    float envLevel = mEnv.Process();
-
-    if (!mEnv.IsActive())
-    {
-      mOsc1.NoteOff();
-      mOsc2.NoteOff();
-      mOsc3.NoteOff();
-    }
-
-    float mix = (mOsc1.Process() * vol1 + mOsc2.Process() * vol2 + mOsc3.Process() * vol3) * envLevel;
-
-    outputs[0][i] = mix;
-    outputs[1][i] = mix;
-
-    // --- LFO/CC + animation : boucle libre en continu, calee sur la
-    // duree reelle de la fenetre de capture de la banque LFO selectionnee.
+    // --- LFO/CC + animation + modulation : boucle libre en continu, calee
+    // sur la duree reelle de la fenetre de capture de la banque LFO
+    // selectionnee. Calcule en premier car le volume/morph de cet
+    // echantillon peuvent en dependre (modulation).
     float animPos = (float)mLFOPhase * (float)kAnimRes;
     int idx0 = (int)animPos % kAnimRes;
     int idx1 = (idx0 + 1) % kAnimRes;
@@ -542,6 +582,50 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
     float y2 = Interp(mBankAnimY[lfoBank][1]);
     float x3 = Interp(mBankAnimX[lfoBank][2]);
     float y3 = Interp(mBankAnimY[lfoBank][2]);
+
+    float vol1Eff = vol1, vol2Eff = vol2, vol3Eff = vol3;
+    float morphEff = baseMorph;
+
+    if (anyModActive)
+    {
+      // Position normalisee -1..1 de chaque corps, pour la modulation.
+      float mod1 = std::clamp(x1 / animScale, -1.f, 1.f);
+      float mod2 = std::clamp(x2 / animScale, -1.f, 1.f);
+      float mod3 = std::clamp(x3 / animScale, -1.f, 1.f);
+
+      auto GetMod = [&](int src) -> float {
+        if (src == 1) return mod1;
+        if (src == 2) return mod2;
+        if (src == 3) return mod3;
+        return 0.f; // Aucun
+      };
+
+      if (modVol1Src) vol1Eff = std::clamp(vol1 + GetMod(modVol1Src) * 0.5f, 0.f, 1.f);
+      if (modVol2Src) vol2Eff = std::clamp(vol2 + GetMod(modVol2Src) * 0.5f, 0.f, 1.f);
+      if (modVol3Src) vol3Eff = std::clamp(vol3 + GetMod(modVol3Src) * 0.5f, 0.f, 1.f);
+
+      if (modMorphSrc)
+      {
+        morphEff = std::clamp(baseMorph + GetMod(modMorphSrc) * 63.5f, 0.f, 127.f);
+        mOsc1.SetMorphPosition(morphEff);
+        mOsc2.SetMorphPosition(morphEff);
+        mOsc3.SetMorphPosition(morphEff);
+      }
+    }
+
+    float envLevel = mEnv.Process();
+
+    if (!mEnv.IsActive())
+    {
+      mOsc1.NoteOff();
+      mOsc2.NoteOff();
+      mOsc3.NoteOff();
+    }
+
+    float mix = (mOsc1.Process() * vol1Eff + mOsc2.Process() * vol2Eff + mOsc3.Process() * vol3Eff) * envLevel;
+
+    outputs[0][i] = mix;
+    outputs[1][i] = mix;
 
     auto ToCC = [&](float x) { return (int)std::clamp(((x / animScale) + 1.f) * 0.5f * 127.f, 0.f, 127.f); };
 
@@ -576,6 +660,11 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
       mUIBodyX[1].store(x2); mUIBodyY[1].store(y2);
       mUIBodyX[2].store(x3); mUIBodyY[2].store(y3);
       mUIAnimScale.store(animScale);
+
+      mUIModVol1Value.store(vol1Eff);
+      mUIModVol2Value.store(vol2Eff);
+      mUIModVol3Value.store(vol3Eff);
+      mUIModMorphValue.store(morphEff / 127.f);
     }
 
     mLFOPhase += phaseInc;

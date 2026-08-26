@@ -5,6 +5,7 @@
 #include "MorphingOscillator.h"
 #include "WaveformPreviewControl.h"
 #include "BodyAnimationControl.h"
+#include "ModulatableKnobControl.h"
 #include "ADSREnvelope.h"
 #include <atomic>
 
@@ -49,6 +50,14 @@ enum EParams
   kParamCC3Number,
   kParamLFORate, // 0.001 - 1 : ralentit la boucle LFO/animation par rapport a sa vitesse max
 
+  // Petite matrice de modulation : chaque destination peut etre pilotee en
+  // direct par la position d'un des 3 corps de la banque LFO selectionnee
+  // (ou aucun, par defaut).
+  kParamModVol1Src,
+  kParamModVol2Src,
+  kParamModVol3Src,
+  kParamModMorphSrc,
+
   kNumParams
 };
 
@@ -69,6 +78,10 @@ public:
     for (int b = 0; b < 3; b++) mBankWaveView[b] = nullptr;
     mMorphWaveView = nullptr;
     mAnimView = nullptr;
+    mModVol1Knob = nullptr;
+    mModVol2Knob = nullptr;
+    mModVol3Knob = nullptr;
+    mModMorphSlider = nullptr;
   }
 
 #if IPLUG_DSP
@@ -86,6 +99,15 @@ private:
   WaveformPreviewControl* mBankWaveView[3] = { nullptr, nullptr, nullptr };
   WaveformPreviewControl* mMorphWaveView = nullptr;
   BodyAnimationControl* mAnimView = nullptr;
+
+  ModulatableKnobControl* mModVol1Knob = nullptr;
+  ModulatableKnobControl* mModVol2Knob = nullptr;
+  ModulatableKnobControl* mModVol3Knob = nullptr;
+  ModulatableSliderControl* mModMorphSlider = nullptr;
+  std::atomic<float> mUIModVol1Value { 0.f };
+  std::atomic<float> mUIModVol2Value { 0.f };
+  std::atomic<float> mUIModVol3Value { 0.f };
+  std::atomic<float> mUIModMorphValue { 0.f };
 
   // Etat partage thread audio -> interface, par banque (apercu par onglet)
   std::atomic<bool> mBankUIUpdated[3] = { false, false, false };
