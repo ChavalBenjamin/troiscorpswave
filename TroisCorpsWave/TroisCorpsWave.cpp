@@ -79,7 +79,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     // --- Panneau de fond distinct pour toute la zone "banque" (onglets +
     // --- grille + apercu), pour bien la separer visuellement de la zone
     // --- "parametres generaux" plus bas.
-    IRECT bankPanel(bounds.L, bounds.T, bounds.R, bounds.T + 420.f);
+    IRECT bankPanel(bounds.L, bounds.T, bounds.R, bounds.T + 335.f);
     pGraphics->AttachControl(new IPanelControl(bankPanel, IColor(255, 95, 95, 100)));
 
     // --- Rangee d'onglets (Bank 1/2/3), avec surbrillance de l'onglet actif ---
@@ -91,7 +91,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     // --- alignee en colonnes par numero de corps (1, 2, 3) - plus la
     // --- colonne laterale des 4 parametres generaux de la banque
     // --- (Orbital Vel, Box, Window, Table Size), separee visuellement.
-    IRECT bankGrid = NextSection(260.f).GetPadded(-10.f);
+    IRECT bankGrid = NextSection(200.f).GetPadded(-10.f);
     IRECT mainGrid(bankGrid.L, bankGrid.T, bankGrid.L + bankGrid.W() * 0.72f, bankGrid.B);
     IRECT sideCol(mainGrid.R, bankGrid.T, bankGrid.R, bankGrid.B);
 
@@ -105,7 +105,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     int sideOffsets[4] = { kOffOrbitalVel, kOffBoxSize, kOffCaptureWindow, kOffTableSize };
     const char* sideLabels[4] = { "OrbVel", "Box", "Window", "TblSz" };
 
-    IRECT bankWaveArea = NextSection(110.f).GetPadded(-10.f);
+    IRECT bankWaveArea = NextSection(85.f).GetPadded(-10.f);
 
     for (int b = 0; b < 3; b++)
     {
@@ -135,7 +135,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
 
         IControl* ctrl;
         if (offset == kOffTableSize)
-          ctrl = new IVMenuButtonControl(cell.GetCentredInside(75.f, 24.f), paramIdx, sideLabels[s]);
+          ctrl = new IVMenuButtonControl(cell.GetCentredInside(95.f, 34.f), paramIdx, sideLabels[s]);
         else
           ctrl = new IVKnobControl(cell.GetCentredInside(52.f), paramIdx, sideLabels[s], knobStyle);
 
@@ -157,7 +157,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
 
     // --- Parametres partages : Vol 1/2/3 + Bit Depth ---
     // --- Panneau de fond distinct pour la zone "parametres generaux" ---
-    IRECT generalPanel(bounds.L, bounds.T + y, bounds.R, bounds.T + y + 195.f);
+    IRECT generalPanel(bounds.L, bounds.T + y, bounds.R, bounds.T + y + 130.f);
     pGraphics->AttachControl(new IPanelControl(generalPanel, IColor(255, 75, 75, 85)));
 
     IRECT sharedRow1 = NextSection(65.f).GetPadded(-10.f);
@@ -178,14 +178,6 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 1, 1, 4).GetCentredInside(58.f), kParamDecay, "Decay", knobStyle));
     pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 2, 1, 4).GetCentredInside(58.f), kParamSustain, "Sustain", knobStyle));
     pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 3, 1, 4).GetCentredInside(58.f), kParamRelease, "Release", knobStyle));
-
-    // --- Petite matrice de modulation : Vol1/2/3 + Morph, chacun pilotable
-    // --- par un des 3 corps de la banque LFO (ou aucun, par defaut).
-    IRECT modRow = NextSection(65.f).GetPadded(-10.f);
-    pGraphics->AttachControl(new IVMenuButtonControl(modRow.GetGridCell(0, 0, 1, 4).GetCentredInside(85.f, 26.f), kParamModVol1Src, "Mod Vol1"));
-    pGraphics->AttachControl(new IVMenuButtonControl(modRow.GetGridCell(0, 1, 1, 4).GetCentredInside(85.f, 26.f), kParamModVol2Src, "Mod Vol2"));
-    pGraphics->AttachControl(new IVMenuButtonControl(modRow.GetGridCell(0, 2, 1, 4).GetCentredInside(85.f, 26.f), kParamModVol3Src, "Mod Vol3"));
-    pGraphics->AttachControl(new IVMenuButtonControl(modRow.GetGridCell(0, 3, 1, 4).GetCentredInside(85.f, 26.f), kParamModMorphSrc, "Mod Morph"));
 
     // --- Zone du bas, coupee en deux colonnes : Morph (gauche) / LFO+Anime (droite) ---
     IRECT lowerArea(bounds.L, bounds.T + y, bounds.R, bounds.B);
@@ -211,7 +203,24 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     IRECT lfoRateRow = IRECT(lfoCol.L, lfoCol.T + 50.f, lfoCol.R, lfoCol.T + 110.f).GetPadded(-8.f);
     pGraphics->AttachControl(new IVKnobControl(lfoRateRow.GetCentredInside(58.f), kParamLFORate, "LFO Rate", knobStyle));
 
-    IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 110.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
+    // --- Petit tableau de modulation (4 destinations x Aucun/1/2/3) ---
+    IRECT modMatrix = IRECT(lfoCol.L, lfoCol.T + 110.f, lfoCol.R, lfoCol.T + 242.f).GetPadded(-8.f);
+    const char* modRowLabels[4] = { "Vol1", "Vol2", "Vol3", "Morph" };
+    int modRowParams[4] = { kParamModVol1Src, kParamModVol2Src, kParamModVol3Src, kParamModMorphSrc };
+    IText modLabelText(11.f, COLOR_WHITE);
+
+    for (int r = 0; r < 4; r++)
+    {
+      IRECT rowRect = modMatrix.GetGridCell(r, 0, 4, 1);
+      IRECT labelZone(rowRect.L, rowRect.T, rowRect.L + rowRect.W() * 0.28f, rowRect.B);
+      IRECT switchZone(labelZone.R, rowRect.T, rowRect.R, rowRect.B);
+
+      pGraphics->AttachControl(new ITextControl(labelZone, modRowLabels[r], modLabelText));
+      pGraphics->AttachControl(new IVTabSwitchControl(switchZone.GetPadded(-2.f), modRowParams[r],
+        { "-", "1", "2", "3" }));
+    }
+
+    IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 242.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
     mAnimView = new BodyAnimationControl(animArea);
     pGraphics->AttachControl(mAnimView);
   };
