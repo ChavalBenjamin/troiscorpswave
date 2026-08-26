@@ -204,7 +204,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(lfoRateRow.GetCentredInside(58.f), kParamLFORate, "LFO Rate", knobStyle));
 
     // --- Petit tableau de modulation (4 destinations x Aucun/1/2/3) ---
-    IRECT modMatrix = IRECT(lfoCol.L, lfoCol.T + 110.f, lfoCol.R, lfoCol.T + 242.f).GetPadded(-8.f);
+    IRECT modMatrix = IRECT(lfoCol.L, lfoCol.T + 110.f, lfoCol.R, lfoCol.T + 190.f).GetPadded(-8.f);
     const char* modRowLabels[4] = { "Vol1", "Vol2", "Vol3", "Morph" };
     int modRowParams[4] = { kParamModVol1Src, kParamModVol2Src, kParamModVol3Src, kParamModMorphSrc };
     IText modLabelText(11.f, COLOR_WHITE);
@@ -220,7 +220,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
         { "-", "1", "2", "3" }));
     }
 
-    IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 242.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
+    IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 190.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
     mAnimView = new BodyAnimationControl(animArea);
     pGraphics->AttachControl(mAnimView);
   };
