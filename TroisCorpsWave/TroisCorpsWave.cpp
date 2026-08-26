@@ -58,6 +58,10 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachPanelBackground(COLOR_GRAY);
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
 
+    // Style commun a tous les rotatifs : nom au-dessus plus petit, valeur
+    // (donnee) laissee a sa taille par defaut.
+    const IVStyle knobStyle = DEFAULT_STYLE.WithLabelText(IText(10.f, COLOR_WHITE));
+
     const IRECT bounds = pGraphics->GetBounds();
     float y = 0.f;
     auto NextSection = [&](float h) {
@@ -70,7 +74,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     // --- grille + apercu), pour bien la separer visuellement de la zone
     // --- "parametres generaux" plus bas.
     IRECT bankPanel(bounds.L, bounds.T, bounds.R, bounds.T + 420.f);
-    pGraphics->AttachControl(new IPanelControl(bankPanel, IColor(255, 45, 45, 50)));
+    pGraphics->AttachControl(new IPanelControl(bankPanel, IColor(255, 95, 95, 100)));
 
     // --- Rangee d'onglets (Bank 1/2/3), avec surbrillance de l'onglet actif ---
     IRECT tabRow = NextSection(50.f).GetPadded(-10.f);
@@ -107,10 +111,10 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
         {
           int offset = rowOffsets[row][col];
           int paramIdx = BankParam(b, offset);
-          IRECT cell = mainGrid.GetGridCell(row, col, 3, 3).GetCentredInside(46.f);
+          IRECT cell = mainGrid.GetGridCell(row, col, 3, 3).GetCentredInside(60.f);
           std::snprintf(label, sizeof(label), "%s%d", rowPrefix[row], col + 1);
 
-          IControl* ctrl = new IVKnobControl(cell, paramIdx, label);
+          IControl* ctrl = new IVKnobControl(cell, paramIdx, label, knobStyle);
           pGraphics->AttachControl(ctrl);
           ctrl->Hide(b != 0);
           mBankControls[b][offset] = ctrl;
@@ -127,7 +131,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
         if (offset == kOffTableSize)
           ctrl = new IVMenuButtonControl(cell.GetCentredInside(75.f, 24.f), paramIdx, sideLabels[s]);
         else
-          ctrl = new IVKnobControl(cell.GetCentredInside(40.f), paramIdx, sideLabels[s]);
+          ctrl = new IVKnobControl(cell.GetCentredInside(52.f), paramIdx, sideLabels[s], knobStyle);
 
         pGraphics->AttachControl(ctrl);
         ctrl->Hide(b != 0);
@@ -138,25 +142,30 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
       pGraphics->AttachControl(waveView);
       waveView->Hide(b != 0);
       mBankWaveView[b] = waveView;
+      // Pousse immediatement les donnees deja connues (deja calculees lors
+      // d'une capture precedente) - sans ca, fermer puis rouvrir la fenetre
+      // du plugin recree ce graphique vide, et il ne se remplit qu'au
+      // prochain VRAI changement de parametre (jamais si rien ne bouge).
+      waveView->SetWaveforms(mBankUICopy1[b], mBankUICopy2[b], mBankUICopy3[b], mBankUISize[b]);
     }
 
     // --- Parametres partages : Vol 1/2/3 + Bit Depth ---
     // --- Panneau de fond distinct pour la zone "parametres generaux" ---
     IRECT generalPanel(bounds.L, bounds.T + y, bounds.R, bounds.T + y + 130.f);
-    pGraphics->AttachControl(new IPanelControl(generalPanel, IColor(255, 55, 55, 60)));
+    pGraphics->AttachControl(new IPanelControl(generalPanel, IColor(255, 75, 75, 85)));
 
     IRECT sharedRow1 = NextSection(65.f).GetPadded(-10.f);
-    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 0, 1, 4).GetCentredInside(46.f), kParamVol1, "Vol 1"));
-    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 1, 1, 4).GetCentredInside(46.f), kParamVol2, "Vol 2"));
-    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 2, 1, 4).GetCentredInside(46.f), kParamVol3, "Vol 3"));
-    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 3, 1, 4).GetCentredInside(46.f), kParamBitDepth, "BitDepth"));
+    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 0, 1, 4).GetCentredInside(58.f), kParamVol1, "Vol 1", knobStyle));
+    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 1, 1, 4).GetCentredInside(58.f), kParamVol2, "Vol 2", knobStyle));
+    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 2, 1, 4).GetCentredInside(58.f), kParamVol3, "Vol 3", knobStyle));
+    pGraphics->AttachControl(new IVKnobControl(sharedRow1.GetGridCell(0, 3, 1, 4).GetCentredInside(58.f), kParamBitDepth, "BitDepth", knobStyle));
 
     // --- Parametres partages : ADSR ---
     IRECT sharedRow2 = NextSection(65.f).GetPadded(-10.f);
-    pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 0, 1, 4).GetCentredInside(46.f), kParamAttack, "Attack"));
-    pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 1, 1, 4).GetCentredInside(46.f), kParamDecay, "Decay"));
-    pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 2, 1, 4).GetCentredInside(46.f), kParamSustain, "Sustain"));
-    pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 3, 1, 4).GetCentredInside(46.f), kParamRelease, "Release"));
+    pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 0, 1, 4).GetCentredInside(58.f), kParamAttack, "Attack", knobStyle));
+    pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 1, 1, 4).GetCentredInside(58.f), kParamDecay, "Decay", knobStyle));
+    pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 2, 1, 4).GetCentredInside(58.f), kParamSustain, "Sustain", knobStyle));
+    pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 3, 1, 4).GetCentredInside(58.f), kParamRelease, "Release", knobStyle));
 
     // --- Zone du bas, coupee en deux colonnes : Morph (gauche) / LFO+Anime (droite) ---
     IRECT lowerArea(bounds.L, bounds.T + y, bounds.R, bounds.B);
@@ -165,12 +174,13 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
 
     // Colonne gauche : slider de morphing (0 = banque1, 63 = banque2, 127 = banque3)
     // puis apercu du resultat du morphing en direct.
-    IRECT morphRow = morphCol.GetFromTop(55.f).GetPadded(-10.f);
+    IRECT morphRow = morphCol.GetFromTop(100.f).GetPadded(-10.f);
     pGraphics->AttachControl(new IVSliderControl(morphRow, kParamMorph, "Morph", DEFAULT_STYLE, true, EDirection::Horizontal));
 
-    IRECT morphWaveArea = IRECT(morphCol.L, morphCol.T + 55.f, morphCol.R, morphCol.B).GetPadded(-10.f);
+    IRECT morphWaveArea = IRECT(morphCol.L, morphCol.T + 100.f, morphCol.R, morphCol.B).GetPadded(-10.f);
     mMorphWaveView = new WaveformPreviewControl(morphWaveArea);
     pGraphics->AttachControl(mMorphWaveView);
+    mLastDrawnMorph = -1.f; // force un premier calcul/affichage frais a chaque (re)creation de l'UI
 
     // Colonne droite : selecteur de banque LFO (1/2/3, independant des
     // onglets d'edition), reglage de vitesse, puis animation des 3 corps.
@@ -178,7 +188,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(new IVTabSwitchControl(lfoTabRow, kParamLFOBank, { "1", "2", "3" }));
 
     IRECT lfoRateRow = IRECT(lfoCol.L, lfoCol.T + 50.f, lfoCol.R, lfoCol.T + 110.f).GetPadded(-8.f);
-    pGraphics->AttachControl(new IVKnobControl(lfoRateRow.GetCentredInside(46.f), kParamLFORate, "LFO Rate"));
+    pGraphics->AttachControl(new IVKnobControl(lfoRateRow.GetCentredInside(58.f), kParamLFORate, "LFO Rate", knobStyle));
 
     IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 110.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
     mAnimView = new BodyAnimationControl(animArea);
