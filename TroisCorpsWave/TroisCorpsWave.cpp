@@ -716,6 +716,7 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
       mUIModVol2Value.store(vol2Eff);
       mUIModVol3Value.store(vol3Eff);
       mUIModMorphValue.store(morphEff / 127.f);
+      mUIMorphPosition.store(morphEff); // le graphique de morphing suit la valeur REELLEMENT appliquee (modulee ou non)
     }
 
     mLFOPhase += phaseInc;
