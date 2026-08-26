@@ -1,4 +1,4 @@
-#pragma once
+ #pragma once
 
 #include "IPlug_include_in_plug_hdr.h"
 #include "ThreeBodyEngine.h"
@@ -41,6 +41,7 @@ enum EParams
   kParamRelease,
   kParamBitDepth,
   kParamMorph,
+  kParamActiveTab, // 0/1/2 - pilote l'onglet visible ET sa surbrillance (IVTabSwitchControl)
 
   kNumParams
 };
@@ -72,7 +73,6 @@ public:
 
 private:
   void SwitchTab(int tabIdx);
-  void RequestCaptureActiveTab() { mForceCaptureBank = mActiveTab; }
 
   int mActiveTab = 0;
   IControl* mBankControls[3][kNumBankParams] = {};   // pour montrer/cacher par onglet
@@ -88,6 +88,12 @@ private:
 
   std::atomic<float> mUIMorphPosition { 0.f };
 
+  // Trace du dernier morph dessine, pour n'affiner le graphique de
+  // morphing (calcul + redessin) que lorsque quelque chose a vraiment
+  // change - evite un gaspillage de calcul continu qui ralentissait les
+  // controles (le morph notamment).
+  float mLastDrawnMorph = -1.f;
+
 #if IPLUG_DSP
   void DoCaptureBank(int bankIdx);
   void UpdateEnvelopeParams();
@@ -95,8 +101,6 @@ private:
   ThreeBodyEngine mEngine;
   MorphingOscillator mOsc1, mOsc2, mOsc3;
   ADSREnvelope mEnv;
-
-  std::atomic<int> mForceCaptureBank { -1 }; // -1 = rien en attente ; sinon index de banque a forcer (bouton Capture)
 
   static constexpr int kMaxRawCapture = 80000; // 10s a 8000Hz de resolution de capture
   float mRawCapture1[kMaxRawCapture];

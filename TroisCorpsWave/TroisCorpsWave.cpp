@@ -40,6 +40,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
   GetParam(kParamRelease)->InitDouble("Release", 0.3, 0.001, 5., 0.001, "s");
   GetParam(kParamBitDepth)->InitInt("Bit Depth", 16, 2, 16);
   GetParam(kParamMorph)->InitDouble("Morph", 0., 0., 127., 0.1);
+  GetParam(kParamActiveTab)->InitEnum("Active Tab", 0, 3, "", IParam::kFlagsNone, "", "Bank 1", "Bank 2", "Bank 3");
 
 #if IPLUG_EDITOR
   mMakeGraphicsFunc = [&]() {
@@ -60,16 +61,10 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
       return r;
     };
 
-    // --- Rangee d'onglets (Bank 1/2/3) + bouton Capture ---
-    IRECT tabRow = NextSection(50.f);
-    pGraphics->AttachControl(new IVButtonControl(tabRow.GetGridCell(0, 0, 1, 4).GetCentredInside(90.f, 32.f),
-      [this](IControl* pCaller) { SwitchTab(0); }, "Bank 1"));
-    pGraphics->AttachControl(new IVButtonControl(tabRow.GetGridCell(0, 1, 1, 4).GetCentredInside(90.f, 32.f),
-      [this](IControl* pCaller) { SwitchTab(1); }, "Bank 2"));
-    pGraphics->AttachControl(new IVButtonControl(tabRow.GetGridCell(0, 2, 1, 4).GetCentredInside(90.f, 32.f),
-      [this](IControl* pCaller) { SwitchTab(2); }, "Bank 3"));
-    pGraphics->AttachControl(new IVButtonControl(tabRow.GetGridCell(0, 3, 1, 4).GetCentredInside(90.f, 32.f),
-      [this](IControl* pCaller) { RequestCaptureActiveTab(); }, "Capture"));
+    // --- Rangee d'onglets (Bank 1/2/3), avec surbrillance de l'onglet actif ---
+    IRECT tabRow = NextSection(50.f).GetPadded(-10.f);
+    pGraphics->AttachControl(new IVTabSwitchControl(tabRow, kParamActiveTab,
+      { "Bank 1", "Bank 2", "Bank 3" }));
 
     // --- Grille de 13 controles physiques, dupliquee x3 (une par banque), ---
     // --- seule celle de l'onglet actif est visible au depart (Bank 1)    ---
@@ -154,59 +149,79 @@ void TroisCorpsWave::SwitchTab(int tabIdx)
       if (mBankControls[b][k]) mBankControls[b][k]->Hide(!visible);
     if (mBankWaveView[b]) mBankWaveView[b]->Hide(!visible);
   }
+
+  // Rafraichit explicitement le graphique de l'onglet qu'on vient
+  // d'afficher, avec les dernieres donnees connues de cette banque -
+  // sans ca, le passage d'un onglet a l'autre pouvait laisser un
+  // graphique vide/perime (les donnees etaient bien calculees, mais
+  // jamais repoussees vers l'affichage au moment precis du clic).
+  if (mBankWaveView[tabIdx])
+  {
+    mBankWaveView[tabIdx]->SetWaveforms(mBankUICopy1[tabIdx], mBankUICopy2[tabIdx], mBankUICopy3[tabIdx], mBankUISize[tabIdx]);
+    mBankWaveView[tabIdx]->SetDirty(true);
+  }
 }
 
 void TroisCorpsWave::OnIdle()
 {
+  bool anyBankJustUpdated = false;
+
   for (int b = 0; b < 3; b++)
   {
     if (mBankUIUpdated[b].exchange(false) && mBankWaveView[b])
     {
       mBankWaveView[b]->SetWaveforms(mBankUICopy1[b], mBankUICopy2[b], mBankUICopy3[b], mBankUISize[b]);
       mBankWaveView[b]->SetDirty(false);
+      anyBankJustUpdated = true;
     }
   }
 
   if (mMorphWaveView)
   {
     float morph = mUIMorphPosition.load();
-    constexpr int kPreviewRes = 512;
-    static float blend1[kPreviewRes], blend2[kPreviewRes], blend3[kPreviewRes];
 
-    auto SampleBank = [&](const float* buf, int size, int idx) -> float {
-      if (size <= 0) return 0.f;
-      float pos = (float)idx / (float)kPreviewRes * (float)size;
-      int i0 = (int)pos % size;
-      int i1 = (i0 + 1) % size;
-      float frac = pos - (float)(int)pos;
-      return buf[i0] * (1.f - frac) + buf[i1] * frac;
-    };
-
-    auto Morph3 = [&](float a, float b, float c) -> float {
-      if (morph <= 63.f) { float t = morph / 63.f; return a * (1.f - t) + b * t; }
-      float t = (morph - 63.f) / 64.f;
-      return b * (1.f - t) + c * t;
-    };
-
-    for (int i = 0; i < kPreviewRes; i++)
+    if (morph != mLastDrawnMorph || anyBankJustUpdated)
     {
-      float s0_1 = SampleBank(mBankUICopy1[0], mBankUISize[0], i);
-      float s1_1 = SampleBank(mBankUICopy1[1], mBankUISize[1], i);
-      float s2_1 = SampleBank(mBankUICopy1[2], mBankUISize[2], i);
-      float s0_2 = SampleBank(mBankUICopy2[0], mBankUISize[0], i);
-      float s1_2 = SampleBank(mBankUICopy2[1], mBankUISize[1], i);
-      float s2_2 = SampleBank(mBankUICopy2[2], mBankUISize[2], i);
-      float s0_3 = SampleBank(mBankUICopy3[0], mBankUISize[0], i);
-      float s1_3 = SampleBank(mBankUICopy3[1], mBankUISize[1], i);
-      float s2_3 = SampleBank(mBankUICopy3[2], mBankUISize[2], i);
+      mLastDrawnMorph = morph;
 
-      blend1[i] = Morph3(s0_1, s1_1, s2_1);
-      blend2[i] = Morph3(s0_2, s1_2, s2_2);
-      blend3[i] = Morph3(s0_3, s1_3, s2_3);
+      constexpr int kPreviewRes = 512;
+      static float blend1[kPreviewRes], blend2[kPreviewRes], blend3[kPreviewRes];
+
+      auto SampleBank = [&](const float* buf, int size, int idx) -> float {
+        if (size <= 0) return 0.f;
+        float pos = (float)idx / (float)kPreviewRes * (float)size;
+        int i0 = (int)pos % size;
+        int i1 = (i0 + 1) % size;
+        float frac = pos - (float)(int)pos;
+        return buf[i0] * (1.f - frac) + buf[i1] * frac;
+      };
+
+      auto Morph3 = [&](float a, float b, float c) -> float {
+        if (morph <= 63.f) { float t = morph / 63.f; return a * (1.f - t) + b * t; }
+        float t = (morph - 63.f) / 64.f;
+        return b * (1.f - t) + c * t;
+      };
+
+      for (int i = 0; i < kPreviewRes; i++)
+      {
+        float s0_1 = SampleBank(mBankUICopy1[0], mBankUISize[0], i);
+        float s1_1 = SampleBank(mBankUICopy1[1], mBankUISize[1], i);
+        float s2_1 = SampleBank(mBankUICopy1[2], mBankUISize[2], i);
+        float s0_2 = SampleBank(mBankUICopy2[0], mBankUISize[0], i);
+        float s1_2 = SampleBank(mBankUICopy2[1], mBankUISize[1], i);
+        float s2_2 = SampleBank(mBankUICopy2[2], mBankUISize[2], i);
+        float s0_3 = SampleBank(mBankUICopy3[0], mBankUISize[0], i);
+        float s1_3 = SampleBank(mBankUICopy3[1], mBankUISize[1], i);
+        float s2_3 = SampleBank(mBankUICopy3[2], mBankUISize[2], i);
+
+        blend1[i] = Morph3(s0_1, s1_1, s2_1);
+        blend2[i] = Morph3(s0_2, s1_2, s2_2);
+        blend3[i] = Morph3(s0_3, s1_3, s2_3);
+      }
+
+      mMorphWaveView->SetWaveforms(blend1, blend2, blend3, kPreviewRes);
+      mMorphWaveView->SetDirty(false);
     }
-
-    mMorphWaveView->SetWaveforms(blend1, blend2, blend3, kPreviewRes);
-    mMorphWaveView->SetDirty(false);
   }
 }
 
@@ -325,6 +340,9 @@ void TroisCorpsWave::OnParamChange(int paramIdx)
     case kParamRelease:
       UpdateEnvelopeParams();
       break;
+    case kParamActiveTab:
+      SwitchTab((int)GetParam(kParamActiveTab)->Value());
+      break;
     default:
       break;
   }
@@ -348,13 +366,6 @@ void TroisCorpsWave::ProcessMidiMsg(const IMidiMsg& msg)
 
 void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
 {
-  int forced = mForceCaptureBank.exchange(-1);
-  if (forced >= 0 && forced < 3)
-  {
-    DoCaptureBank(forced);
-    mBankDebounceSamples[forced] = 0;
-  }
-
   for (int b = 0; b < 3; b++)
   {
     if (mBankDebounceSamples[b] > 0)
