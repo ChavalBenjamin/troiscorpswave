@@ -41,6 +41,10 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
   GetParam(kParamBitDepth)->InitInt("Bit Depth", 16, 2, 16);
   GetParam(kParamMorph)->InitDouble("Morph", 0., 0., 127., 0.1);
   GetParam(kParamActiveTab)->InitEnum("Active Tab", 0, 3, "", IParam::kFlagsNone, "", "Bank 1", "Bank 2", "Bank 3");
+  GetParam(kParamLFOBank)->InitEnum("LFO Bank", 0, 3, "", IParam::kFlagsNone, "", "1", "2", "3");
+  GetParam(kParamCC1Number)->InitInt("CC 1", 20, 0, 127);
+  GetParam(kParamCC2Number)->InitInt("CC 2", 21, 0, 127);
+  GetParam(kParamCC3Number)->InitInt("CC 3", 22, 0, 127);
 
 #if IPLUG_EDITOR
   mMakeGraphicsFunc = [&]() {
@@ -121,14 +125,28 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 2, 1, 4).GetCentredInside(46.f), kParamSustain, "Sustain"));
     pGraphics->AttachControl(new IVKnobControl(sharedRow2.GetGridCell(0, 3, 1, 4).GetCentredInside(46.f), kParamRelease, "Release"));
 
-    // --- Slider de morphing (0 = banque1, 63 = banque2, 127 = banque3) ---
-    IRECT morphRow = NextSection(55.f).GetPadded(-10.f);
+    // --- Zone du bas, coupee en deux colonnes : Morph (gauche) / LFO+Anime (droite) ---
+    IRECT lowerArea(bounds.L, bounds.T + y, bounds.R, bounds.B);
+    IRECT morphCol(lowerArea.L, lowerArea.T, lowerArea.L + lowerArea.W() * 0.6f, lowerArea.B);
+    IRECT lfoCol(lowerArea.L + lowerArea.W() * 0.6f, lowerArea.T, lowerArea.R, lowerArea.B);
+
+    // Colonne gauche : slider de morphing (0 = banque1, 63 = banque2, 127 = banque3)
+    // puis apercu du resultat du morphing en direct.
+    IRECT morphRow = morphCol.GetFromTop(55.f).GetPadded(-10.f);
     pGraphics->AttachControl(new IVSliderControl(morphRow, kParamMorph, "Morph", DEFAULT_STYLE, true, EDirection::Horizontal));
 
-    // --- Apercu du resultat du morphing en direct, toujours visible ---
-    IRECT morphWaveArea = IRECT(bounds.L, bounds.T + y, bounds.R, bounds.B).GetPadded(-10.f);
+    IRECT morphWaveArea = IRECT(morphCol.L, morphCol.T + 55.f, morphCol.R, morphCol.B).GetPadded(-10.f);
     mMorphWaveView = new WaveformPreviewControl(morphWaveArea);
     pGraphics->AttachControl(mMorphWaveView);
+
+    // Colonne droite : selecteur de banque LFO (1/2/3, independant des
+    // onglets d'edition) puis animation des 3 corps de cette banque.
+    IRECT lfoTabRow = lfoCol.GetFromTop(50.f).GetPadded(-8.f);
+    pGraphics->AttachControl(new IVTabSwitchControl(lfoTabRow, kParamLFOBank, { "1", "2", "3" }));
+
+    IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 50.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
+    mAnimView = new BodyAnimationControl(animArea);
+    pGraphics->AttachControl(mAnimView);
   };
 #endif
 
@@ -223,6 +241,17 @@ void TroisCorpsWave::OnIdle()
       mMorphWaveView->SetDirty(false);
     }
   }
+
+  // Anime les 3 corps de la banque LFO selectionnee, en continu.
+  if (mAnimView)
+  {
+    mAnimView->SetPositions(
+      mUIBodyX[0].load(), mUIBodyY[0].load(),
+      mUIBodyX[1].load(), mUIBodyY[1].load(),
+      mUIBodyX[2].load(), mUIBodyY[2].load(),
+      mUIAnimScale.load());
+    mAnimView->SetDirty(false);
+  }
 }
 
 #if IPLUG_DSP
@@ -248,13 +277,13 @@ void TroisCorpsWave::DoCaptureBank(int bankIdx)
   mEngine.SetBoxSize(boxSize);
   mEngine.ResetBodies(r1, r2, r3, a1, a2, a3, orbitalVel);
 
-  int nCaptured = mEngine.CaptureAllBodiesX(captureWindow, mRawCapture1, mRawCapture2, mRawCapture3, kMaxRawCapture);
+  int nCaptured = mEngine.CaptureAllBodiesXY(captureWindow, mRawX1, mRawY1, mRawX2, mRawY2, mRawX3, mRawY3, kMaxRawCapture);
 
   if (nCaptured > 1)
   {
-    mOsc1.SetBankTable(bankIdx, mRawCapture1, nCaptured, tableSize);
-    mOsc2.SetBankTable(bankIdx, mRawCapture2, nCaptured, tableSize);
-    mOsc3.SetBankTable(bankIdx, mRawCapture3, nCaptured, tableSize);
+    mOsc1.SetBankTable(bankIdx, mRawX1, nCaptured, tableSize);
+    mOsc2.SetBankTable(bankIdx, mRawX2, nCaptured, tableSize);
+    mOsc3.SetBankTable(bankIdx, mRawX3, nCaptured, tableSize);
 
     mBankUISize[bankIdx] = mOsc1.GetBankTableSize(bankIdx);
     const float* t1 = mOsc1.GetBankTable(bankIdx);
@@ -267,6 +296,38 @@ void TroisCorpsWave::DoCaptureBank(int bankIdx)
       mBankUICopy3[bankIdx][i] = t3[i];
     }
     mBankUIUpdated[bankIdx].store(true);
+
+    // Reechantillonnage X,Y (les 3 corps) pour l'animation/LFO, a une
+    // resolution fixe independante de la table audio, + calcul de
+    // l'echelle d'affichage (etendue max toutes coordonnees confondues,
+    // pour garder les proportions coherentes entre les 3 corps).
+    auto ResampleXY = [&](const float* srcX, const float* srcY, float* dstX, float* dstY)
+    {
+      for (int i = 0; i < kAnimRes; i++)
+      {
+        float srcPos = (float)i / (float)kAnimRes * (float)nCaptured;
+        int i0 = (int)srcPos;
+        int i1 = std::min(i0 + 1, nCaptured - 1);
+        float frac = srcPos - (float)i0;
+        dstX[i] = srcX[i0] * (1.f - frac) + srcX[i1] * frac;
+        dstY[i] = srcY[i0] * (1.f - frac) + srcY[i1] * frac;
+      }
+    };
+
+    ResampleXY(mRawX1, mRawY1, mBankAnimX[bankIdx][0], mBankAnimY[bankIdx][0]);
+    ResampleXY(mRawX2, mRawY2, mBankAnimX[bankIdx][1], mBankAnimY[bankIdx][1]);
+    ResampleXY(mRawX3, mRawY3, mBankAnimX[bankIdx][2], mBankAnimY[bankIdx][2]);
+
+    float maxExtent = 1e-6f;
+    for (int body = 0; body < 3; body++)
+    {
+      for (int i = 0; i < kAnimRes; i++)
+      {
+        maxExtent = std::max(maxExtent, std::abs(mBankAnimX[bankIdx][body][i]));
+        maxExtent = std::max(maxExtent, std::abs(mBankAnimY[bankIdx][body][i]));
+      }
+    }
+    mBankAnimScale[bankIdx] = maxExtent;
   }
 }
 
@@ -298,6 +359,9 @@ void TroisCorpsWave::OnReset()
 
   mEnv.SetSampleRate(GetSampleRate());
   UpdateEnvelopeParams();
+
+  mLFOPhase = 0.0;
+  mLastSentCC1 = mLastSentCC2 = mLastSentCC3 = -1;
 
   for (int b = 0; b < 3; b++)
     DoCaptureBank(b);
@@ -343,6 +407,11 @@ void TroisCorpsWave::OnParamChange(int paramIdx)
     case kParamActiveTab:
       SwitchTab((int)GetParam(kParamActiveTab)->Value());
       break;
+    case kParamLFOBank:
+      // Redemarre la boucle proprement au changement de banque source,
+      // plutot que de sauter au milieu d'un cycle different.
+      mLFOPhase = 0.0;
+      break;
     default:
       break;
   }
@@ -383,6 +452,14 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   float vol2 = (float)(GetParam(kParamVol2)->Value() / 100.0);
   float vol3 = (float)(GetParam(kParamVol3)->Value() / 100.0);
 
+  int lfoBank = (int)GetParam(kParamLFOBank)->Value();
+  double captureWindow = GetParam(BankParam(lfoBank, kOffCaptureWindow))->Value();
+  double phaseInc = (1.0 / GetSampleRate()) / std::max(0.001, captureWindow);
+  int cc1Number = (int)GetParam(kParamCC1Number)->Value();
+  int cc2Number = (int)GetParam(kParamCC2Number)->Value();
+  int cc3Number = (int)GetParam(kParamCC3Number)->Value();
+  float animScale = mBankAnimScale[lfoBank];
+
   for (int i = 0; i < nFrames; i++)
   {
     float envLevel = mEnv.Process();
@@ -398,6 +475,60 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
 
     outputs[0][i] = mix;
     outputs[1][i] = mix;
+
+    // --- LFO/CC + animation : boucle libre en continu, calee sur la
+    // duree reelle de la fenetre de capture de la banque LFO selectionnee.
+    float animPos = (float)mLFOPhase * (float)kAnimRes;
+    int idx0 = (int)animPos % kAnimRes;
+    int idx1 = (idx0 + 1) % kAnimRes;
+    float frac = animPos - (float)(int)animPos;
+
+    auto Interp = [&](const float* buf) { return buf[idx0] * (1.f - frac) + buf[idx1] * frac; };
+
+    float x1 = Interp(mBankAnimX[lfoBank][0]);
+    float y1 = Interp(mBankAnimY[lfoBank][0]);
+    float x2 = Interp(mBankAnimX[lfoBank][1]);
+    float y2 = Interp(mBankAnimY[lfoBank][1]);
+    float x3 = Interp(mBankAnimX[lfoBank][2]);
+    float y3 = Interp(mBankAnimY[lfoBank][2]);
+
+    auto ToCC = [&](float x) { return (int)std::clamp(((x / animScale) + 1.f) * 0.5f * 127.f, 0.f, 127.f); };
+
+    int cc1 = ToCC(x1);
+    if (cc1 != mLastSentCC1)
+    {
+      IMidiMsg msg;
+      msg.MakeControlChangeMsg((IMidiMsg::EControlChangeMsg)cc1Number, cc1 / 127.0, 0, i);
+      SendMidiMsg(msg);
+      mLastSentCC1 = cc1;
+    }
+    int cc2 = ToCC(x2);
+    if (cc2 != mLastSentCC2)
+    {
+      IMidiMsg msg;
+      msg.MakeControlChangeMsg((IMidiMsg::EControlChangeMsg)cc2Number, cc2 / 127.0, 0, i);
+      SendMidiMsg(msg);
+      mLastSentCC2 = cc2;
+    }
+    int cc3 = ToCC(x3);
+    if (cc3 != mLastSentCC3)
+    {
+      IMidiMsg msg;
+      msg.MakeControlChangeMsg((IMidiMsg::EControlChangeMsg)cc3Number, cc3 / 127.0, 0, i);
+      SendMidiMsg(msg);
+      mLastSentCC3 = cc3;
+    }
+
+    if (i == nFrames - 1) // suffit de mettre a jour l'affichage une fois par bloc
+    {
+      mUIBodyX[0].store(x1); mUIBodyY[0].store(y1);
+      mUIBodyX[1].store(x2); mUIBodyY[1].store(y2);
+      mUIBodyX[2].store(x3); mUIBodyY[2].store(y3);
+      mUIAnimScale.store(animScale);
+    }
+
+    mLFOPhase += phaseInc;
+    if (mLFOPhase >= 1.0) mLFOPhase -= 1.0;
   }
 }
 
