@@ -57,6 +57,7 @@ enum EParams
   kParamModVol2Src,
   kParamModVol3Src,
   kParamModMorphSrc,
+  kParamPolyphony, // 1-6 : limite le nombre de voix disponibles pour l'allocation/le vol
 
   kNumParams
 };
@@ -129,8 +130,29 @@ private:
   void UpdateEnvelopeParams();
 
   ThreeBodyEngine mEngine;
-  MorphingOscillator mOsc1, mOsc2, mOsc3;
-  ADSREnvelope mEnv;
+  static constexpr int kNumVoices = 6;
+  struct Voice
+  {
+    MorphingOscillator osc1, osc2, osc3;
+    ADSREnvelope env;
+    int currentNote = -1; // -1 = pas assignee a une note en cours
+
+    bool IsFree() const { return currentNote < 0 && !env.IsActive(); }
+  };
+  Voice mVoices[kNumVoices];
+  int mNextVoiceToSteal = 0; // pour le vol de voix "tourniquet" quand les 6 sont occupees
+
+  int AllocateVoice(int limit)
+  {
+    limit = std::clamp(limit, 1, (int)kNumVoices);
+
+    for (int v = 0; v < limit; v++)
+      if (mVoices[v].IsFree()) return v;
+
+    int stolen = mNextVoiceToSteal % limit;
+    mNextVoiceToSteal = (stolen + 1) % limit;
+    return stolen;
+  }
 
   static constexpr int kMaxRawCapture = 80000; // 10s a 8000Hz de resolution de capture
   float mRawX1[kMaxRawCapture]; float mRawY1[kMaxRawCapture];

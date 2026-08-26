@@ -52,6 +52,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
   GetParam(kParamModVol2Src)->InitEnum("Mod Vol2", 0, 4, "", IParam::kFlagsNone, "", modOptions[0], modOptions[1], modOptions[2], modOptions[3]);
   GetParam(kParamModVol3Src)->InitEnum("Mod Vol3", 0, 4, "", IParam::kFlagsNone, "", modOptions[0], modOptions[1], modOptions[2], modOptions[3]);
   GetParam(kParamModMorphSrc)->InitEnum("Mod Morph", 0, 4, "", IParam::kFlagsNone, "", modOptions[0], modOptions[1], modOptions[2], modOptions[3]);
+  GetParam(kParamPolyphony)->InitInt("Polyphony", kNumVoices, 1, kNumVoices);
 
 #if IPLUG_EDITOR
   mMakeGraphicsFunc = [&]() {
@@ -135,7 +136,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
 
         IControl* ctrl;
         if (offset == kOffTableSize)
-          ctrl = new IVMenuButtonControl(cell.GetCentredInside(95.f, 34.f), paramIdx, sideLabels[s]);
+          ctrl = new IVMenuButtonControl(cell.GetCentredInside(75.f, 24.f), paramIdx, sideLabels[s]);
         else
           ctrl = new IVKnobControl(cell.GetCentredInside(52.f), paramIdx, sideLabels[s], knobStyle);
 
@@ -201,10 +202,13 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(new IVTabSwitchControl(lfoTabRow, kParamLFOBank, { "1", "2", "3" }));
 
     IRECT lfoRateRow = IRECT(lfoCol.L, lfoCol.T + 50.f, lfoCol.R, lfoCol.T + 110.f).GetPadded(-8.f);
-    pGraphics->AttachControl(new IVKnobControl(lfoRateRow.GetCentredInside(58.f), kParamLFORate, "LFO Rate", knobStyle));
+    IRECT lfoRateCell(lfoRateRow.L, lfoRateRow.T, lfoRateRow.L + lfoRateRow.W() * 0.5f, lfoRateRow.B);
+    IRECT polyCell(lfoRateCell.R, lfoRateRow.T, lfoRateRow.R, lfoRateRow.B);
+    pGraphics->AttachControl(new IVKnobControl(lfoRateCell.GetCentredInside(58.f), kParamLFORate, "LFO Rate", knobStyle));
+    pGraphics->AttachControl(new IVKnobControl(polyCell.GetCentredInside(58.f), kParamPolyphony, "Polyphony", knobStyle));
 
     // --- Petit tableau de modulation (4 destinations x Aucun/1/2/3) ---
-    IRECT modMatrix = IRECT(lfoCol.L, lfoCol.T + 110.f, lfoCol.R, lfoCol.T + 190.f).GetPadded(-8.f);
+    IRECT modMatrix = IRECT(lfoCol.L, lfoCol.T + 110.f, lfoCol.R, lfoCol.T + 242.f).GetPadded(-8.f);
     const char* modRowLabels[4] = { "Vol1", "Vol2", "Vol3", "Morph" };
     int modRowParams[4] = { kParamModVol1Src, kParamModVol2Src, kParamModVol3Src, kParamModMorphSrc };
     IText modLabelText(11.f, COLOR_WHITE);
@@ -220,7 +224,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
         { "-", "1", "2", "3" }));
     }
 
-    IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 190.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
+    IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 242.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
     mAnimView = new BodyAnimationControl(animArea);
     pGraphics->AttachControl(mAnimView);
   };
@@ -385,14 +389,17 @@ void TroisCorpsWave::DoCaptureBank(int bankIdx)
 
   if (nCaptured > 1)
   {
-    mOsc1.SetBankTable(bankIdx, mRawX1, nCaptured, tableSize);
-    mOsc2.SetBankTable(bankIdx, mRawX2, nCaptured, tableSize);
-    mOsc3.SetBankTable(bankIdx, mRawX3, nCaptured, tableSize);
+    for (int v = 0; v < kNumVoices; v++)
+    {
+      mVoices[v].osc1.SetBankTable(bankIdx, mRawX1, nCaptured, tableSize);
+      mVoices[v].osc2.SetBankTable(bankIdx, mRawX2, nCaptured, tableSize);
+      mVoices[v].osc3.SetBankTable(bankIdx, mRawX3, nCaptured, tableSize);
+    }
 
-    mBankUISize[bankIdx] = mOsc1.GetBankTableSize(bankIdx);
-    const float* t1 = mOsc1.GetBankTable(bankIdx);
-    const float* t2 = mOsc2.GetBankTable(bankIdx);
-    const float* t3 = mOsc3.GetBankTable(bankIdx);
+    mBankUISize[bankIdx] = mVoices[0].osc1.GetBankTableSize(bankIdx);
+    const float* t1 = mVoices[0].osc1.GetBankTable(bankIdx);
+    const float* t2 = mVoices[0].osc2.GetBankTable(bankIdx);
+    const float* t3 = mVoices[0].osc3.GetBankTable(bankIdx);
     for (int i = 0; i < mBankUISize[bankIdx]; i++)
     {
       mBankUICopy1[bankIdx][i] = t1[i];
@@ -441,27 +448,34 @@ void TroisCorpsWave::UpdateEnvelopeParams()
   double decay = GetParam(kParamDecay)->Value();
   double sustain = GetParam(kParamSustain)->Value() / 100.0;
   double release = GetParam(kParamRelease)->Value();
-  mEnv.SetADSR(attack, decay, sustain, release);
+  for (int v = 0; v < kNumVoices; v++)
+    mVoices[v].env.SetADSR(attack, decay, sustain, release);
 }
 
 void TroisCorpsWave::OnReset()
 {
-  mOsc1.SetSampleRate(GetSampleRate());
-  mOsc2.SetSampleRate(GetSampleRate());
-  mOsc3.SetSampleRate(GetSampleRate());
-
   int bits = (int)GetParam(kParamBitDepth)->Value();
-  mOsc1.SetBitDepth(bits);
-  mOsc2.SetBitDepth(bits);
-  mOsc3.SetBitDepth(bits);
-
   float morph = (float)GetParam(kParamMorph)->Value();
-  mOsc1.SetMorphPosition(morph);
-  mOsc2.SetMorphPosition(morph);
-  mOsc3.SetMorphPosition(morph);
   mUIMorphPosition.store(morph);
 
-  mEnv.SetSampleRate(GetSampleRate());
+  for (int v = 0; v < kNumVoices; v++)
+  {
+    mVoices[v].osc1.SetSampleRate(GetSampleRate());
+    mVoices[v].osc2.SetSampleRate(GetSampleRate());
+    mVoices[v].osc3.SetSampleRate(GetSampleRate());
+
+    mVoices[v].osc1.SetBitDepth(bits);
+    mVoices[v].osc2.SetBitDepth(bits);
+    mVoices[v].osc3.SetBitDepth(bits);
+
+    mVoices[v].osc1.SetMorphPosition(morph);
+    mVoices[v].osc2.SetMorphPosition(morph);
+    mVoices[v].osc3.SetMorphPosition(morph);
+
+    mVoices[v].env.SetSampleRate(GetSampleRate());
+    mVoices[v].currentNote = -1;
+  }
+
   UpdateEnvelopeParams();
 
   mLFOPhase = 0.0;
@@ -488,17 +502,23 @@ void TroisCorpsWave::OnParamChange(int paramIdx)
     case kParamBitDepth:
     {
       int bits = (int)GetParam(kParamBitDepth)->Value();
-      mOsc1.SetBitDepth(bits);
-      mOsc2.SetBitDepth(bits);
-      mOsc3.SetBitDepth(bits);
+      for (int v = 0; v < kNumVoices; v++)
+      {
+        mVoices[v].osc1.SetBitDepth(bits);
+        mVoices[v].osc2.SetBitDepth(bits);
+        mVoices[v].osc3.SetBitDepth(bits);
+      }
       break;
     }
     case kParamMorph:
     {
       float morph = (float)GetParam(kParamMorph)->Value();
-      mOsc1.SetMorphPosition(morph);
-      mOsc2.SetMorphPosition(morph);
-      mOsc3.SetMorphPosition(morph);
+      for (int v = 0; v < kNumVoices; v++)
+      {
+        mVoices[v].osc1.SetMorphPosition(morph);
+        mVoices[v].osc2.SetMorphPosition(morph);
+        mVoices[v].osc3.SetMorphPosition(morph);
+      }
       mUIMorphPosition.store(morph);
       break;
     }
@@ -525,15 +545,27 @@ void TroisCorpsWave::ProcessMidiMsg(const IMidiMsg& msg)
 {
   if (msg.StatusMsg() == IMidiMsg::kNoteOn && msg.Velocity() > 0)
   {
-    mOsc1.NoteOn(msg.NoteNumber());
-    mOsc2.NoteOn(msg.NoteNumber());
-    mOsc3.NoteOn(msg.NoteNumber());
-    mEnv.NoteOn();
+    int note = msg.NoteNumber();
+    int limit = (int)GetParam(kParamPolyphony)->Value();
+    int v = AllocateVoice(limit);
+    mVoices[v].currentNote = note;
+    mVoices[v].osc1.NoteOn(note);
+    mVoices[v].osc2.NoteOn(note);
+    mVoices[v].osc3.NoteOn(note);
+    mVoices[v].env.NoteOn();
   }
   else if (msg.StatusMsg() == IMidiMsg::kNoteOff ||
            (msg.StatusMsg() == IMidiMsg::kNoteOn && msg.Velocity() == 0))
   {
-    mEnv.NoteOff();
+    int note = msg.NoteNumber();
+    for (int v = 0; v < kNumVoices; v++)
+    {
+      if (mVoices[v].currentNote == note)
+      {
+        mVoices[v].env.NoteOff();
+        mVoices[v].currentNote = -1;
+      }
+    }
   }
 }
 
@@ -616,22 +648,32 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
       if (modMorphSrc)
       {
         morphEff = std::clamp(baseMorph + GetMod(modMorphSrc) * 63.5f, 0.f, 127.f);
-        mOsc1.SetMorphPosition(morphEff);
-        mOsc2.SetMorphPosition(morphEff);
-        mOsc3.SetMorphPosition(morphEff);
+        for (int v = 0; v < kNumVoices; v++)
+        {
+          mVoices[v].osc1.SetMorphPosition(morphEff);
+          mVoices[v].osc2.SetMorphPosition(morphEff);
+          mVoices[v].osc3.SetMorphPosition(morphEff);
+        }
       }
     }
 
-    float envLevel = mEnv.Process();
-
-    if (!mEnv.IsActive())
+    // --- Somme des 6 voix polyphoniques ---
+    float mix = 0.f;
+    for (int v = 0; v < kNumVoices; v++)
     {
-      mOsc1.NoteOff();
-      mOsc2.NoteOff();
-      mOsc3.NoteOff();
-    }
+      Voice& voice = mVoices[v];
+      float envLevel = voice.env.Process();
 
-    float mix = (mOsc1.Process() * vol1Eff + mOsc2.Process() * vol2Eff + mOsc3.Process() * vol3Eff) * envLevel;
+      if (!voice.env.IsActive())
+      {
+        voice.osc1.NoteOff();
+        voice.osc2.NoteOff();
+        voice.osc3.NoteOff();
+        continue;
+      }
+
+      mix += (voice.osc1.Process() * vol1Eff + voice.osc2.Process() * vol2Eff + voice.osc3.Process() * vol3Eff) * envLevel;
+    }
 
     outputs[0][i] = mix;
     outputs[1][i] = mix;
