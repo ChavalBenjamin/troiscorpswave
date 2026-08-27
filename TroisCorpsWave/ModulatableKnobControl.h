@@ -88,18 +88,23 @@ private:
 };
 
 // ============================================================================
-// BodyColorTabSwitch
+// BodySourceSelector
 //
-// Variante de IVTabSwitchControl dont la couleur de surbrillance change
-// selon le segment actuellement selectionne (Aucun = gris, 1/2/3 = couleur
-// du corps correspondant, coherente avec les graphiques). Suppose 4
-// segments (Aucun/1/2/3).
+// Selecteur compact a 4 segments (Aucun / Corps 1 / Corps 2 / Corps 3),
+// entierement dessine et gere a la main (clic inclus), pour garantir que la
+// couleur du segment selectionne corresponde bien au corps choisi (gris
+// pour Aucun, bleu/corail/vert pour 1/2/3) - evite toute dependance a une
+// convention de couleur interne d'IVTabSwitchControl qui s'est averee peu
+// fiable.
 // ============================================================================
 
-class BodyColorTabSwitch : public iplug::igraphics::IVTabSwitchControl
+class BodySourceSelector : public iplug::igraphics::IControl
 {
 public:
-  using IVTabSwitchControl::IVTabSwitchControl;
+  BodySourceSelector(const iplug::igraphics::IRECT& bounds, int paramIdx)
+  : IControl(bounds, paramIdx)
+  {
+  }
 
   void Draw(iplug::igraphics::IGraphics& g) override
   {
@@ -107,12 +112,34 @@ public:
 
     int sel = (int)std::round(GetValue() * 3.0); // 0=Aucun, 1/2/3 = corps
 
-    IColor highlight = COLOR_WHITE;
-    if (sel == 1) highlight = IColor(255, 100, 180, 255); // corps 1 : bleu
-    else if (sel == 2) highlight = IColor(255, 255, 130, 80); // corps 2 : corail
-    else if (sel == 3) highlight = IColor(255, 130, 220, 130); // corps 3 : vert
+    static const char* kLabels[4] = { "-", "1", "2", "3" };
+    static const IColor kColors[4] = {
+      IColor(255, 70, 70, 75),
+      IColor(255, 100, 180, 255),
+      IColor(255, 255, 130, 80),
+      IColor(255, 130, 220, 130)
+    };
 
-    SetColor(kX1, highlight);
-    IVTabSwitchControl::Draw(g);
+    float segW = mRECT.W() / 4.f;
+    IText labelText(11.f, COLOR_WHITE);
+
+    for (int i = 0; i < 4; i++)
+    {
+      IRECT seg(mRECT.L + segW * (float)i, mRECT.T, mRECT.L + segW * (float)(i + 1), mRECT.B);
+      bool active = (i == sel);
+
+      g.FillRect(active ? kColors[i] : IColor(255, 35, 35, 40), seg);
+      g.DrawRect(IColor(255, 20, 20, 25), seg);
+      g.DrawText(labelText, kLabels[i], seg);
+    }
+  }
+
+  void OnMouseDown(float x, float y, const iplug::igraphics::IMouseMod& mod) override
+  {
+    float segW = mRECT.W() / 4.f;
+    int seg = (int)((x - mRECT.L) / segW);
+    seg = std::clamp(seg, 0, 3);
+    SetValue((double)seg / 3.0);
+    SetDirty(true);
   }
 };

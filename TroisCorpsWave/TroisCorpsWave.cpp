@@ -124,7 +124,8 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
           IRECT cell = mainGrid.GetGridCell(row, col, 3, 3).GetCentredInside(60.f);
           std::snprintf(label, sizeof(label), "%s%d", rowPrefix[row], col + 1);
 
-          IControl* ctrl = new IVKnobControl(cell, paramIdx, label, knobStyle);
+          const IVStyle* styleForCol[3] = { &knobStyleBody1, &knobStyleBody2, &knobStyleBody3 };
+          IControl* ctrl = new IVKnobControl(cell, paramIdx, label, *styleForCol[col]);
           pGraphics->AttachControl(ctrl);
           ctrl->Hide(b != 0);
           mBankControls[b][offset] = ctrl;
@@ -223,8 +224,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
       IRECT switchZone(labelZone.R, rowRect.T, rowRect.R, rowRect.B);
 
       pGraphics->AttachControl(new ITextControl(labelZone, modRowLabels[r], modLabelText));
-      pGraphics->AttachControl(new BodyColorTabSwitch(switchZone.GetPadded(-2.f), modRowParams[r],
-        { "-", "1", "2", "3" }));
+      pGraphics->AttachControl(new BodySourceSelector(switchZone.GetPadded(-2.f), modRowParams[r]));
     }
 
     IRECT animArea = IRECT(lfoCol.L, lfoCol.T + 242.f, lfoCol.R, lfoCol.B).GetPadded(-10.f);
