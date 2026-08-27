@@ -68,6 +68,9 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     // Style commun a tous les rotatifs : nom au-dessus plus petit, valeur
     // (donnee) laissee a sa taille par defaut.
     const IVStyle knobStyle = DEFAULT_STYLE.WithLabelText(IText(10.f, COLOR_WHITE));
+    const IVStyle knobStyleBody1 = knobStyle.WithColor(kFG, IColor(255, 100, 180, 255));
+    const IVStyle knobStyleBody2 = knobStyle.WithColor(kFG, IColor(255, 255, 130, 80));
+    const IVStyle knobStyleBody3 = knobStyle.WithColor(kFG, IColor(255, 130, 220, 130));
 
     const IRECT bounds = pGraphics->GetBounds();
     float y = 0.f;
@@ -84,7 +87,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     pGraphics->AttachControl(new IPanelControl(bankPanel, IColor(255, 95, 95, 100)));
 
     // --- Rangee d'onglets (Bank 1/2/3), avec surbrillance de l'onglet actif ---
-    IRECT tabRow = NextSection(50.f).GetPadded(-10.f);
+    IRECT tabRow = NextSection(36.f).GetPadded(-8.f);
     pGraphics->AttachControl(new IVTabSwitchControl(tabRow, kParamActiveTab,
       { "Bank 1", "Bank 2", "Bank 3" }));
 
@@ -92,7 +95,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     // --- alignee en colonnes par numero de corps (1, 2, 3) - plus la
     // --- colonne laterale des 4 parametres generaux de la banque
     // --- (Orbital Vel, Box, Window, Table Size), separee visuellement.
-    IRECT bankGrid = NextSection(200.f).GetPadded(-10.f);
+    IRECT bankGrid = NextSection(214.f).GetPadded(-10.f);
     IRECT mainGrid(bankGrid.L, bankGrid.T, bankGrid.L + bankGrid.W() * 0.72f, bankGrid.B);
     IRECT sideCol(mainGrid.R, bankGrid.T, bankGrid.R, bankGrid.B);
 
@@ -138,7 +141,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
         if (offset == kOffTableSize)
           ctrl = new IVMenuButtonControl(cell.GetCentredInside(75.f, 24.f), paramIdx, sideLabels[s]);
         else
-          ctrl = new IVKnobControl(cell.GetCentredInside(52.f), paramIdx, sideLabels[s], knobStyle);
+          ctrl = new IVKnobControl(cell.GetCentredInside(48.f), paramIdx, sideLabels[s], knobStyle);
 
         pGraphics->AttachControl(ctrl);
         ctrl->Hide(b != 0);
@@ -165,9 +168,9 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
     IRECT vol1Cell = sharedRow1.GetGridCell(0, 0, 1, 4).GetCentredInside(58.f);
     IRECT vol2Cell = sharedRow1.GetGridCell(0, 1, 1, 4).GetCentredInside(58.f);
     IRECT vol3Cell = sharedRow1.GetGridCell(0, 2, 1, 4).GetCentredInside(58.f);
-    mModVol1Knob = new ModulatableKnobControl(vol1Cell, kParamVol1, "Vol 1", knobStyle);
-    mModVol2Knob = new ModulatableKnobControl(vol2Cell, kParamVol2, "Vol 2", knobStyle);
-    mModVol3Knob = new ModulatableKnobControl(vol3Cell, kParamVol3, "Vol 3", knobStyle);
+    mModVol1Knob = new ModulatableKnobControl(vol1Cell, kParamVol1, "Vol 1", knobStyleBody1);
+    mModVol2Knob = new ModulatableKnobControl(vol2Cell, kParamVol2, "Vol 2", knobStyleBody2);
+    mModVol3Knob = new ModulatableKnobControl(vol3Cell, kParamVol3, "Vol 3", knobStyleBody3);
     pGraphics->AttachControl(mModVol1Knob);
     pGraphics->AttachControl(mModVol2Knob);
     pGraphics->AttachControl(mModVol3Knob);
@@ -220,7 +223,7 @@ TroisCorpsWave::TroisCorpsWave(const InstanceInfo& info)
       IRECT switchZone(labelZone.R, rowRect.T, rowRect.R, rowRect.B);
 
       pGraphics->AttachControl(new ITextControl(labelZone, modRowLabels[r], modLabelText));
-      pGraphics->AttachControl(new IVTabSwitchControl(switchZone.GetPadded(-2.f), modRowParams[r],
+      pGraphics->AttachControl(new BodyColorTabSwitch(switchZone.GetPadded(-2.f), modRowParams[r],
         { "-", "1", "2", "3" }));
     }
 
@@ -647,7 +650,13 @@ void TroisCorpsWave::ProcessBlock(sample** inputs, sample** outputs, int nFrames
 
       if (modMorphSrc)
       {
-        morphEff = std::clamp(baseMorph + GetMod(modMorphSrc) * 63.5f, 0.f, 127.f);
+        // Balaie tout l'intervalle 0-127 directement depuis la position du
+        // corps, independamment de la position du curseur Morph de base
+        // (qui reste a 0 = Banque 1 par defaut, sans avoir besoin de le
+        // repositionner manuellement au milieu pour que la modulation
+        // puisse atteindre toutes les banques).
+        float mod = GetMod(modMorphSrc); // -1..1
+        morphEff = std::clamp((mod + 1.f) * 0.5f * 127.f, 0.f, 127.f);
         for (int v = 0; v < kNumVoices; v++)
         {
           mVoices[v].osc1.SetMorphPosition(morphEff);

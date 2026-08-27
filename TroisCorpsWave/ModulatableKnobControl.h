@@ -86,3 +86,33 @@ private:
   float mModValue = 0.f;
   bool mModActive = false;
 };
+
+// ============================================================================
+// BodyColorTabSwitch
+//
+// Variante de IVTabSwitchControl dont la couleur de surbrillance change
+// selon le segment actuellement selectionne (Aucun = gris, 1/2/3 = couleur
+// du corps correspondant, coherente avec les graphiques). Suppose 4
+// segments (Aucun/1/2/3).
+// ============================================================================
+
+class BodyColorTabSwitch : public iplug::igraphics::IVTabSwitchControl
+{
+public:
+  using IVTabSwitchControl::IVTabSwitchControl;
+
+  void Draw(iplug::igraphics::IGraphics& g) override
+  {
+    using namespace iplug::igraphics;
+
+    int sel = (int)std::round(GetValue() * 3.0); // 0=Aucun, 1/2/3 = corps
+
+    IColor highlight = COLOR_WHITE;
+    if (sel == 1) highlight = IColor(255, 100, 180, 255); // corps 1 : bleu
+    else if (sel == 2) highlight = IColor(255, 255, 130, 80); // corps 2 : corail
+    else if (sel == 3) highlight = IColor(255, 130, 220, 130); // corps 3 : vert
+
+    SetColor(kX1, highlight);
+    IVTabSwitchControl::Draw(g);
+  }
+};

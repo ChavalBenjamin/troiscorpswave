@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <cstdlib>
 
 // ============================================================================
 // MorphingOscillator
@@ -83,7 +84,12 @@ public:
   void NoteOn(int midiNote)
   {
     mFreq = 440.0 * std::pow(2.0, (midiNote - 69) / 12.0);
-    mPhase = 0.0;
+    // Phase de depart ALEATOIRE (plutot que toujours 0) : en polyphonie,
+    // deux voix a hauteur proche demarrant toujours a la meme phase restent
+    // parfaitement synchronisees et peuvent s'annuler systematiquement
+    // (interference destructive) - un depart aleatoire evite ce probleme
+    // classique en synthese polyphonique.
+    mPhase = (double)std::rand() / (double)RAND_MAX;
     mActive = true;
     for (int b = 0; b < 3; b++) mBankCrossfading[b] = false;
   }
